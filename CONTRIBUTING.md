@@ -50,7 +50,7 @@ When ready to submit a bug report, please use the [Bug Report issue template](ht
 Project maintainers will merge changes that both improve the project and meet our standards for code quality.
 
 <!-- The [Pull Request Guide](docs/workflow/pr-guide.md) and [License](https://github.com/Ryujinx/Ryujinx/blob/master/LICENSE.txt) docs define additional guidance. -->
-The [Pull Request Guide](docs/workflow/pr-guide.md) and [License](https://github.com/Ryujinx/Ryujinx/blob/develop/LICENSE.txt) docs define additional guidance.
+The [Pull Request Guide](docs/workflow/pr-guide.md) and [License](https://github.com/ADEMOLA200/RyuNX/blob/develop/LICENSE.txt) docs define additional guidance.
 
 ### DOs and DON'Ts
 
