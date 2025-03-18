@@ -8,6 +8,8 @@
   <br>
 </h1>
 
+<h1> This is a continuation of Ryujinx project which includes the builds of my Ryujinx releases</h1>
+
 <p align="center">
   Ryujinx is an open-source Nintendo Switch emulator, created by gdkchan, written in C#.
   This emulator aims at providing excellent accuracy and performance, a user-friendly interface and consistent builds.
