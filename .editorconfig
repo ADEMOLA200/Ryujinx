@@ -27,6 +27,7 @@ tab_width = 2
 # C# files
 [*.cs]
 
+
 #### .NET Coding Conventions ####
 
 # Organize usings

@@ -83,4 +83,4 @@ body:
         - Additional info about your environment:
         - Any other information relevant to your issue.
     validations:
-      required: false
+      required: false 
