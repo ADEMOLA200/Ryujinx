@@ -1,0 +1,48 @@
+name: Migrate Releases
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate-releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt update
+          sudo apt install -y gh
+
+      - name: Authenticate GitHub CLI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Fetch and Migrate Releases
+        run: |
+          SOURCE_REPO="Ryubing/Canary-Releases"
+          DEST_REPO="ADEMOLA200/RyuNX"
+
+          RELEASES=$(gh release list -R "$SOURCE_REPO" --json tagName -q '.[].tagName')
+
+          for TAG in $RELEASES; do
+              echo "Processing release: $TAG"
+
+              # Get asset URLs
+              ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
+
+              # Create the release in the destination repo
+              gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes "Migrated from $SOURCE_REPO"
+
+              # Directly transfer each asset from GitHub to GitHub
+              for URL in $ASSET_URLS; do
+                  FILENAME=$(basename "$URL")
+                  echo "Uploading $FILENAME to $DEST_REPO"
+
+                  # Stream the file from GitHub and upload
+                  gh release upload "$TAG" -R "$DEST_REPO" "$URL"
+              done
+
+              echo "Release $TAG migrated successfully!"
+          done
+

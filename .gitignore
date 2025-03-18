@@ -174,3 +174,7 @@ PublishProfiles/
 # Glade backup files
 *.glade~
 Instructions.txt
+fetch_releases.sh
+fetch_releases.sh.save
+stream_releases.sh
+sync_releases.sh
