@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using FluentAvalonia.Core;
 using FluentAvalonia.UI.Controls;
@@ -19,6 +21,23 @@ namespace Ryujinx.Ava.UI.Helpers
     {
         private static bool _isChoiceDialogOpen;
         private static ContentDialogOverlayWindow _contentDialogOverlayWindow;
+
+        public static ContentDialog ApplyStyles(
+            this ContentDialog contentDialog, 
+            double closeButtonWidth = 80, 
+            HorizontalAlignment buttonSpaceAlignment = HorizontalAlignment.Right)
+        {
+            Style closeButton = new(x => x.Name("CloseButton"));
+            closeButton.Setters.Add(new Setter(Layoutable.WidthProperty, closeButtonWidth));
+            
+            Style closeButtonParent = new(x => x.Name("CommandSpace"));
+            closeButtonParent.Setters.Add(new Setter(Layoutable.HorizontalAlignmentProperty, buttonSpaceAlignment));
+
+            contentDialog.Styles.Add(closeButton);
+            contentDialog.Styles.Add(closeButtonParent);
+
+            return contentDialog;
+        }
 
         private async static Task<UserResult> ShowContentDialog(
              string title,
@@ -39,19 +58,19 @@ namespace Ryujinx.Ava.UI.Helpers
                 SecondaryButtonText = secondaryButton,
                 CloseButtonText = closeButton,
                 Content = content,
-                PrimaryButtonCommand = MiniCommand.Create(() =>
+                PrimaryButtonCommand = Commands.Create(() =>
                 {
                     result = primaryButtonResult;
-                }),
+                })
             };
 
-            contentDialog.SecondaryButtonCommand = MiniCommand.Create(() =>
+            contentDialog.SecondaryButtonCommand = Commands.Create(() =>
             {
                 result = UserResult.No;
                 contentDialog.PrimaryButtonClick -= deferCloseAction;
             });
 
-            contentDialog.CloseButtonCommand = MiniCommand.Create(() =>
+            contentDialog.CloseButtonCommand = Commands.Create(() =>
             {
                 result = UserResult.Cancel;
                 contentDialog.PrimaryButtonClick -= deferCloseAction;
@@ -84,8 +103,8 @@ namespace Ryujinx.Ava.UI.Helpers
             return await ShowContentDialog(title, content, primaryButton, secondaryButton, closeButton, primaryButtonResult, deferResetEvent, deferCloseAction);
         }
 
-        public async static Task<UserResult> ShowDeferredContentDialog(
-            StyleableWindow window,
+        public static async Task<UserResult> ShowDeferredContentDialog(
+            Window window,
             string title,
             string primaryText,
             string secondaryText,
@@ -121,7 +140,7 @@ namespace Ryujinx.Ava.UI.Helpers
 
                 startedDeferring = true;
 
-                var deferral = args.GetDeferral();
+                Deferral deferral = args.GetDeferral();
 
                 sender.PrimaryButtonClick -= DeferClose;
 
@@ -148,8 +167,8 @@ namespace Ryujinx.Ava.UI.Helpers
         {
             Grid content = new()
             {
-                RowDefinitions = new RowDefinitions { new(), new() },
-                ColumnDefinitions = new ColumnDefinitions { new(GridLength.Auto), new() },
+                RowDefinitions = [new(), new()],
+                ColumnDefinitions = [new(GridLength.Auto), new()],
 
                 MinHeight = 80,
             };
@@ -159,6 +178,7 @@ namespace Ryujinx.Ava.UI.Helpers
                 Symbol = (Symbol)symbol,
                 Margin = new Thickness(10),
                 FontSize = 40,
+                FlowDirection = FlowDirection.LeftToRight,
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
@@ -194,22 +214,20 @@ namespace Ryujinx.Ava.UI.Helpers
             return content;
         }
 
-        public static async Task<UserResult> CreateInfoDialog(
+        public static Task<UserResult> CreateInfoDialog(
             string primary,
             string secondaryText,
             string acceptButton,
             string closeButton,
             string title)
-        {
-            return await ShowTextDialog(
+            => ShowTextDialog(
                 title,
                 primary,
                 secondaryText,
                 acceptButton,
-                "",
+                string.Empty,
                 closeButton,
                 (int)Symbol.Important);
-        }
 
         internal static async Task<UserResult> CreateConfirmationDialog(
             string primaryText,
@@ -218,41 +236,71 @@ namespace Ryujinx.Ava.UI.Helpers
             string cancelButtonText,
             string title,
             UserResult primaryButtonResult = UserResult.Yes)
-        {
-            return await ShowTextDialog(
+            => await ShowTextDialog(
                 string.IsNullOrWhiteSpace(title) ? LocaleManager.Instance[LocaleKeys.DialogConfirmationTitle] : title,
                 primaryText,
                 secondaryText,
                 acceptButtonText,
-                "",
+                string.Empty,
                 cancelButtonText,
                 (int)Symbol.Help,
                 primaryButtonResult);
-        }
+
+        internal static async Task<UserResult> CreateDeniableConfirmationDialog(
+            string primaryText,
+            string secondaryText,
+            string acceptButtonText,
+            string noAcceptButtonText,
+            string cancelButtonText,
+            string title,
+            UserResult primaryButtonResult = UserResult.Yes)
+            => await ShowTextDialog(
+                string.IsNullOrWhiteSpace(title) ? LocaleManager.Instance[LocaleKeys.DialogConfirmationTitle] : title,
+                primaryText,
+                secondaryText,
+                acceptButtonText,
+                noAcceptButtonText,
+                cancelButtonText,
+                (int)Symbol.Help,
+                primaryButtonResult);
+
+        internal static async Task<UserResult> CreateLocalizedConfirmationDialog(string primaryText, string secondaryText)
+            => await CreateConfirmationDialog(
+                primaryText,
+                secondaryText,
+                LocaleManager.Instance[LocaleKeys.InputDialogYes],
+                LocaleManager.Instance[LocaleKeys.InputDialogNo],
+                LocaleManager.Instance[LocaleKeys.RyujinxConfirm]);
 
         internal static async Task CreateUpdaterInfoDialog(string primary, string secondaryText)
-        {
-            await ShowTextDialog(
+            => await ShowTextDialog(
                 LocaleManager.Instance[LocaleKeys.DialogUpdaterTitle],
                 primary,
                 secondaryText,
-                "",
-                "",
+                string.Empty,
+                string.Empty,
                 LocaleManager.Instance[LocaleKeys.InputDialogOk],
                 (int)Symbol.Important);
-        }
+        
+        internal static async Task<UserResult> CreateUpdaterUpToDateInfoDialog(string primary, string secondaryText)
+            => await ShowTextDialog(
+                LocaleManager.Instance[LocaleKeys.DialogUpdaterTitle],
+                primary,
+                secondaryText,
+                LocaleManager.Instance[LocaleKeys.DialogUpdaterShowChangelogMessage],
+                string.Empty,
+                LocaleManager.Instance[LocaleKeys.InputDialogOk],
+                (int)Symbol.Important);
 
         internal static async Task CreateWarningDialog(string primary, string secondaryText)
-        {
-            await ShowTextDialog(
+            => await ShowTextDialog(
                 LocaleManager.Instance[LocaleKeys.DialogWarningTitle],
                 primary,
                 secondaryText,
-                "",
-                "",
+                string.Empty,
+                string.Empty,
                 LocaleManager.Instance[LocaleKeys.InputDialogOk],
                 (int)Symbol.Important);
-        }
 
         internal static async Task CreateErrorDialog(string errorMessage, string secondaryErrorMessage = "")
         {
@@ -263,7 +311,7 @@ namespace Ryujinx.Ava.UI.Helpers
                 LocaleManager.Instance[LocaleKeys.DialogErrorMessage],
                 errorMessage,
                 secondaryErrorMessage,
-                "",
+                string.Empty,
                 LocaleManager.Instance[LocaleKeys.InputDialogOk],
                 (int)Symbol.Dismiss);
         }
@@ -282,7 +330,7 @@ namespace Ryujinx.Ava.UI.Helpers
                 primary,
                 secondaryText,
                 LocaleManager.Instance[LocaleKeys.InputDialogYes],
-                "",
+                string.Empty,
                 LocaleManager.Instance[LocaleKeys.InputDialogNo],
                 (int)Symbol.Help,
                 UserResult.Yes);
@@ -290,6 +338,30 @@ namespace Ryujinx.Ava.UI.Helpers
             _isChoiceDialogOpen = false;
 
             return response == UserResult.Yes;
+        }
+        
+        internal static async Task<UserResult> CreateUpdaterChoiceDialog(string title, string primary, string secondaryText)
+        {
+            if (_isChoiceDialogOpen)
+            {
+                return UserResult.Cancel;
+            }
+
+            _isChoiceDialogOpen = true;
+
+            UserResult response = await ShowTextDialog(
+                title,
+                primary,
+                secondaryText,
+                LocaleManager.Instance[LocaleKeys.InputDialogYes],
+                string.Empty, // LocaleManager.Instance[LocaleKeys.DialogUpdaterShowChangelogMessage],
+                LocaleManager.Instance[LocaleKeys.InputDialogNo],
+                (int)Symbol.Help,
+                UserResult.Yes);
+
+            _isChoiceDialogOpen = false;
+
+            return response;
         }
 
         internal static async Task<bool> CreateExitDialog()
@@ -331,6 +403,10 @@ namespace Ryujinx.Ava.UI.Helpers
                     Position = parent.PointToScreen(new Point()),
                     ShowInTaskbar = false,
                 };
+                
+#if DEBUG
+                _contentDialogOverlayWindow.AttachDevTools(new KeyGesture(Key.F12, KeyModifiers.Control));
+#endif
 
                 parent.PositionChanged += OverlayOnPositionChanged;
 
@@ -399,11 +475,9 @@ namespace Ryujinx.Ava.UI.Helpers
             return result;
         }
 
-        public static Task ShowWindowAsync(Window dialogWindow, Window mainWindow = null)
+        public static async Task ShowWindowAsync(Window dialogWindow, Window mainWindow = null)
         {
-            mainWindow ??= GetMainWindow();
-
-            return dialogWindow.ShowDialog(_contentDialogOverlayWindow ?? mainWindow);
+            await dialogWindow.ShowDialog(_contentDialogOverlayWindow ?? mainWindow ?? GetMainWindow());
         }
 
         private static Window GetMainWindow()

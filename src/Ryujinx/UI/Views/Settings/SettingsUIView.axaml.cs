@@ -1,64 +1,84 @@
+using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
-using Avalonia.VisualTree;
-using Ryujinx.Ava.Common.Locale;
+using Gommon;
+using Ryujinx.Ava.UI.Controls;
+using Ryujinx.Ava.UI.Helpers;
 using Ryujinx.Ava.UI.ViewModels;
+using Ryujinx.Ava.Utilities;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Ryujinx.Ava.UI.Views.Settings
 {
-    public partial class SettingsUiView : UserControl
+    public partial class SettingsUiView : RyujinxControl<SettingsViewModel>
     {
-        public SettingsViewModel ViewModel;
-
         public SettingsUiView()
         {
             InitializeComponent();
+            AddGameDirButton.Command =
+                Commands.Create(() => AddDirButton(GameDirPathBox, ViewModel.GameDirectories));
+            AddAutoloadDirButton.Command =
+                Commands.Create(() => AddDirButton(AutoloadDirPathBox, ViewModel.AutoloadDirectories));
         }
 
-        private async void AddButton_OnClick(object sender, RoutedEventArgs e)
+        private async Task AddDirButton(TextBox addDirBox, AvaloniaList<string> directories)
         {
-            string path = PathBox.Text;
+            string path = addDirBox.Text;
 
-            if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path) && !ViewModel.GameDirectories.Contains(path))
+            if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path) && !directories.Contains(path))
             {
-                ViewModel.GameDirectories.Add(path);
-                ViewModel.DirectoryChanged = true;
+                directories.Add(path);
+                
+                addDirBox.Clear();
+
+                ViewModel.GameListNeedsRefresh = true;
             }
             else
             {
-                if (this.GetVisualRoot() is Window window)
-                {
-                    var result = await window.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-                    {
-                        AllowMultiple = false,
-                    });
+                Optional<IStorageFolder> folder = await RyujinxApp.MainWindow.ViewModel.StorageProvider.OpenSingleFolderPickerAsync();
 
-                    if (result.Count > 0)
-                    {
-                        ViewModel.GameDirectories.Add(result[0].Path.LocalPath);
-                        ViewModel.DirectoryChanged = true;
-                    }
+                if (folder.HasValue)
+                {
+                    directories.Add(folder.Value.Path.LocalPath);
+                        
+                    ViewModel.GameListNeedsRefresh = true;
                 }
             }
         }
 
-        private void RemoveButton_OnClick(object sender, RoutedEventArgs e)
+        private void RemoveGameDirButton_OnClick(object sender, RoutedEventArgs e)
         {
-            int oldIndex = GameList.SelectedIndex;
+            int oldIndex = GameDirsList.SelectedIndex;
 
-            foreach (string path in new List<string>(GameList.SelectedItems.Cast<string>()))
+            foreach (string path in new List<string>(GameDirsList.SelectedItems.Cast<string>()))
             {
                 ViewModel.GameDirectories.Remove(path);
-                ViewModel.DirectoryChanged = true;
+                ViewModel.GameListNeedsRefresh = true;
             }
 
-            if (GameList.ItemCount > 0)
+            if (GameDirsList.ItemCount > 0)
             {
-                GameList.SelectedIndex = oldIndex < GameList.ItemCount ? oldIndex : 0;
+                GameDirsList.SelectedIndex = oldIndex < GameDirsList.ItemCount ? oldIndex : 0;
+            }
+        }
+
+        private void RemoveAutoloadDirButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            int oldIndex = AutoloadDirsList.SelectedIndex;
+
+            foreach (string path in new List<string>(AutoloadDirsList.SelectedItems.Cast<string>()))
+            {
+                ViewModel.AutoloadDirectories.Remove(path);
+                ViewModel.GameListNeedsRefresh = true;
+            }
+
+            if (AutoloadDirsList.ItemCount > 0)
+            {
+                AutoloadDirsList.SelectedIndex = oldIndex < AutoloadDirsList.ItemCount ? oldIndex : 0;
             }
         }
     }

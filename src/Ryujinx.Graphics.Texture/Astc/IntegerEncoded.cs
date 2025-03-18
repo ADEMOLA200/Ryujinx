@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace Ryujinx.Graphics.Texture.Astc
 {
-    internal struct IntegerEncoded
+    internal struct IntegerEncoded(IntegerEncoded.EIntegerEncoding encoding, int numBits)
     {
         internal const int StructSize = 8;
         private static readonly IntegerEncoded[] _encodings;
@@ -15,11 +15,11 @@ namespace Ryujinx.Graphics.Texture.Astc
             Trit,
         }
 
-        readonly EIntegerEncoding _encoding;
-        public byte NumberBits { get; private set; }
-        public byte TritValue { get; private set; }
-        public byte QuintValue { get; private set; }
-        public int BitValue { get; private set; }
+        readonly EIntegerEncoding _encoding = encoding;
+        public byte NumberBits { get; } = (byte)numBits;
+        public byte TritValue { get; private set; } = 0;
+        public byte QuintValue { get; private set; } = 0;
+        public int BitValue { get; private set; } = 0;
 
         static IntegerEncoded()
         {
@@ -29,15 +29,6 @@ namespace Ryujinx.Graphics.Texture.Astc
             {
                 _encodings[i] = CreateEncodingCalc(i);
             }
-        }
-
-        public IntegerEncoded(EIntegerEncoding encoding, int numBits)
-        {
-            _encoding = encoding;
-            NumberBits = (byte)numBits;
-            BitValue = 0;
-            TritValue = 0;
-            QuintValue = 0;
         }
 
         public readonly bool MatchesEncoding(IntegerEncoded other)
@@ -138,7 +129,7 @@ namespace Ryujinx.Graphics.Texture.Astc
             ref IntegerSequence listIntegerEncoded,
             int numberBitsPerValue)
         {
-            ReadOnlySpan<byte> interleavedBits = new byte[] { 3, 2, 2 };
+            ReadOnlySpan<byte> interleavedBits = [3, 2, 2];
 
             // Implement the algorithm in section C.2.12
             Span<int> m = stackalloc int[3];
@@ -222,8 +213,8 @@ namespace Ryujinx.Graphics.Texture.Astc
             return QuintEncodings.Slice(index * 3, 3);
         }
 
-        private static ReadOnlySpan<byte> TritEncodings => new byte[]
-        {
+        private static ReadOnlySpan<byte> TritEncodings =>
+        [
             0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0,
             0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0,
             2, 1, 0, 0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 0, 0,
@@ -309,11 +300,11 @@ namespace Ryujinx.Graphics.Texture.Astc
             2, 1, 1, 1, 2, 1, 1, 2, 1, 2, 0, 2, 1, 1, 2,
             1, 2, 1, 1, 2, 2, 2, 1, 1, 2, 2, 1, 2, 1, 2,
             0, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-            2, 1, 2, 2, 2,
-        };
+            2, 1, 2, 2, 2
+        ];
 
-        private static ReadOnlySpan<byte> QuintEncodings => new byte[]
-        {
+        private static ReadOnlySpan<byte> QuintEncodings =>
+        [
             0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0,
             0, 4, 0, 4, 4, 0, 4, 4, 4, 0, 1, 0, 1, 1, 0,
             2, 1, 0, 3, 1, 0, 4, 1, 0, 1, 4, 0, 4, 4, 1,
@@ -339,7 +330,7 @@ namespace Ryujinx.Graphics.Texture.Astc
             0, 1, 4, 1, 1, 4, 0, 2, 3, 1, 2, 3, 2, 2, 3,
             3, 2, 3, 4, 2, 3, 2, 4, 3, 0, 2, 4, 1, 2, 4,
             0, 3, 3, 1, 3, 3, 2, 3, 3, 3, 3, 3, 4, 3, 3,
-            3, 4, 3, 0, 3, 4, 1, 3, 4,
-        };
+            3, 4, 3, 0, 3, 4, 1, 3, 4
+        ];
     }
 }

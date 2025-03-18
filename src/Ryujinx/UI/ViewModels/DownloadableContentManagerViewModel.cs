@@ -1,48 +1,32 @@
 using Avalonia.Collections;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
 using DynamicData;
-using LibHac.Common;
-using LibHac.Fs;
-using LibHac.Fs.Fsa;
-using LibHac.Tools.Fs;
-using LibHac.Tools.FsSystem;
-using LibHac.Tools.FsSystem.NcaUtils;
+using FluentAvalonia.UI.Controls;
 using Ryujinx.Ava.Common.Locale;
+using Ryujinx.Ava.Common.Models;
 using Ryujinx.Ava.UI.Helpers;
-using Ryujinx.Ava.UI.Models;
-using Ryujinx.Common.Configuration;
-using Ryujinx.Common.Logging;
-using Ryujinx.Common.Utilities;
-using Ryujinx.HLE.FileSystem;
-using Ryujinx.HLE.Loaders.Processes.Extensions;
-using Ryujinx.HLE.Utilities;
-using Ryujinx.UI.App.Common;
-using System;
+using Ryujinx.Ava.Systems.AppLibrary;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using Application = Avalonia.Application;
-using Path = System.IO.Path;
+using System.Threading.Tasks;
 
 namespace Ryujinx.Ava.UI.ViewModels
 {
-    public class DownloadableContentManagerViewModel : BaseModel
+    public partial class DownloadableContentManagerViewModel : BaseModel
     {
-        private readonly List<DownloadableContentContainer> _downloadableContentContainerList;
-        private readonly string _downloadableContentJsonPath;
-
-        private readonly VirtualFileSystem _virtualFileSystem;
-        private AvaloniaList<DownloadableContentModel> _downloadableContents = new();
-        private AvaloniaList<DownloadableContentModel> _views = new();
-        private AvaloniaList<DownloadableContentModel> _selectedDownloadableContents = new();
+        private readonly ApplicationLibrary _applicationLibrary;
+        private AvaloniaList<DownloadableContentModel> _downloadableContents = [];
+        [ObservableProperty] private AvaloniaList<DownloadableContentModel> _selectedDownloadableContents = [];
+        [ObservableProperty] private AvaloniaList<DownloadableContentModel> _views = [];
+        [ObservableProperty] private bool _showBundledContentNotice = false;
 
         private string _search;
         private readonly ApplicationData _applicationData;
         private readonly IStorageProvider _storageProvider;
-
-        private static readonly DownloadableContentJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
 
         public AvaloniaList<DownloadableContentModel> DownloadableContents
         {
@@ -53,26 +37,6 @@ namespace Ryujinx.Ava.UI.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(UpdateCount));
                 Sort();
-            }
-        }
-
-        public AvaloniaList<DownloadableContentModel> Views
-        {
-            get => _views;
-            set
-            {
-                _views = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public AvaloniaList<DownloadableContentModel> SelectedDownloadableContents
-        {
-            get => _selectedDownloadableContents;
-            set
-            {
-                _selectedDownloadableContents = value;
-                OnPropertyChanged();
             }
         }
 
@@ -92,123 +56,78 @@ namespace Ryujinx.Ava.UI.ViewModels
             get => string.Format(LocaleManager.Instance[LocaleKeys.DlcWindowHeading], DownloadableContents.Count);
         }
 
-        public DownloadableContentManagerViewModel(VirtualFileSystem virtualFileSystem, ApplicationData applicationData)
+        public DownloadableContentManagerViewModel(ApplicationLibrary applicationLibrary, ApplicationData applicationData)
         {
-            _virtualFileSystem = virtualFileSystem;
+            _applicationLibrary = applicationLibrary;
 
             _applicationData = applicationData;
 
-            if (Application.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            {
-                _storageProvider = desktop.MainWindow.StorageProvider;
-            }
-
-            _downloadableContentJsonPath = Path.Combine(AppDataManager.GamesDirPath, applicationData.IdBaseString, "dlc.json");
-
-            if (!File.Exists(_downloadableContentJsonPath))
-            {
-                _downloadableContentContainerList = new List<DownloadableContentContainer>();
-
-                Save();
-            }
-
-            try
-            {
-                _downloadableContentContainerList = JsonHelper.DeserializeFromFile(_downloadableContentJsonPath, _serializerContext.ListDownloadableContentContainer);
-            }
-            catch
-            {
-                Logger.Error?.Print(LogClass.Configuration, "Downloadable Content JSON failed to deserialize.");
-                _downloadableContentContainerList = new List<DownloadableContentContainer>();
-            }
+            _storageProvider = RyujinxApp.MainWindow.StorageProvider;
 
             LoadDownloadableContents();
         }
 
         private void LoadDownloadableContents()
         {
-            foreach (DownloadableContentContainer downloadableContentContainer in _downloadableContentContainerList)
+            (DownloadableContentModel Dlc, bool IsEnabled)[] dlcs = _applicationLibrary.FindDlcConfigurationFor(_applicationData.Id);
+
+            bool hasBundledContent = false;
+            foreach ((DownloadableContentModel dlc, bool isEnabled) in dlcs)
             {
-                if (File.Exists(downloadableContentContainer.ContainerPath))
+                DownloadableContents.Add(dlc);
+                hasBundledContent = hasBundledContent || dlc.IsBundled;
+
+                if (isEnabled)
                 {
-                    using IFileSystem partitionFileSystem = PartitionFileSystemUtils.OpenApplicationFileSystem(downloadableContentContainer.ContainerPath, _virtualFileSystem);
-
-                    foreach (DownloadableContentNca downloadableContentNca in downloadableContentContainer.DownloadableContentNcaList)
-                    {
-                        using UniqueRef<IFile> ncaFile = new();
-
-                        partitionFileSystem.OpenFile(ref ncaFile.Ref, downloadableContentNca.FullPath.ToU8Span(), OpenMode.Read).ThrowIfFailure();
-
-                        Nca nca = TryOpenNca(ncaFile.Get.AsStorage(), downloadableContentContainer.ContainerPath);
-                        if (nca != null)
-                        {
-                            var content = new DownloadableContentModel(nca.Header.TitleId.ToString("X16"),
-                                downloadableContentContainer.ContainerPath,
-                                downloadableContentNca.FullPath,
-                                downloadableContentNca.Enabled);
-
-                            DownloadableContents.Add(content);
-
-                            if (content.Enabled)
-                            {
-                                SelectedDownloadableContents.Add(content);
-                            }
-
-                            OnPropertyChanged(nameof(UpdateCount));
-                        }
-                    }
+                    SelectedDownloadableContents.Add(dlc);
                 }
+
+                OnPropertyChanged(nameof(UpdateCount));
             }
 
-            // NOTE: Try to load downloadable contents from PFS last to preserve enabled state.
-            AddDownloadableContent(_applicationData.Path);
+            ShowBundledContentNotice = hasBundledContent;
 
-            // NOTE: Save the list again to remove leftovers.
-            Save();
             Sort();
         }
 
         public void Sort()
         {
-            DownloadableContents.AsObservableChangeSet()
+            DownloadableContents
+                // Sort bundled last
+                .OrderBy(it => it.IsBundled ? 0 : 1)
+                .ThenBy(it => it.TitleId)
+                .AsObservableChangeSet()
                 .Filter(Filter)
-                .Bind(out var view).AsObservableList();
+                .Bind(out ReadOnlyObservableCollection<DownloadableContentModel> view).AsObservableList();
 
-            _views.Clear();
-            _views.AddRange(view);
+            // NOTE(jpr): this works around a bug where calling _views.Clear also clears SelectedDownloadableContents for
+            // some reason. so we save the items here and add them back after
+            DownloadableContentModel[] items = SelectedDownloadableContents.ToArray();
+            
+            Views.Clear();
+            Views.AddRange(view);
+
+            foreach (DownloadableContentModel item in items)
+            {
+                SelectedDownloadableContents.ReplaceOrAdd(item, item);
+            }
+
             OnPropertyChanged(nameof(Views));
         }
 
-        private bool Filter(object arg)
+        private bool Filter<T>(T arg)
         {
             if (arg is DownloadableContentModel content)
             {
-                return string.IsNullOrWhiteSpace(_search) || content.FileName.ToLower().Contains(_search.ToLower()) || content.TitleId.ToLower().Contains(_search.ToLower());
+                return string.IsNullOrWhiteSpace(_search) || content.FileName.ToLower().Contains(_search.ToLower()) || content.TitleIdStr.ToLower().Contains(_search.ToLower());
             }
 
             return false;
         }
 
-        private Nca TryOpenNca(IStorage ncaStorage, string containerPath)
-        {
-            try
-            {
-                return new Nca(_virtualFileSystem.KeySet, ncaStorage);
-            }
-            catch (Exception ex)
-            {
-                Dispatcher.UIThread.InvokeAsync(async () =>
-                {
-                    await ContentDialogHelper.CreateErrorDialog(string.Format(LocaleManager.Instance[LocaleKeys.DialogLoadFileErrorMessage], ex.Message, containerPath));
-                });
-            }
-
-            return null;
-        }
-
         public async void Add()
         {
-            var result = await _storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            IReadOnlyList<IStorageFile> result = await _storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = LocaleManager.Instance[LocaleKeys.SelectDlcDialogTitle],
                 AllowMultiple = true,
@@ -216,85 +135,95 @@ namespace Ryujinx.Ava.UI.ViewModels
                 {
                     new("NSP")
                     {
-                        Patterns = new[] { "*.nsp" },
-                        AppleUniformTypeIdentifiers = new[] { "com.ryujinx.nsp" },
-                        MimeTypes = new[] { "application/x-nx-nsp" },
+                        Patterns = ["*.nsp"],
+                        AppleUniformTypeIdentifiers = ["com.ryujinx.nsp"],
+                        MimeTypes = ["application/x-nx-nsp"],
                     },
                 },
             });
 
-            foreach (var file in result)
+            int totalDlcAdded = 0;
+            foreach (IStorageFile file in result)
             {
-                if (!AddDownloadableContent(file.Path.LocalPath))
+                if (!AddDownloadableContent(file.Path.LocalPath, out int newDlcAdded))
                 {
                     await ContentDialogHelper.CreateErrorDialog(LocaleManager.Instance[LocaleKeys.DialogDlcNoDlcErrorMessage]);
                 }
+
+                totalDlcAdded += newDlcAdded;
+            }
+
+            if (totalDlcAdded > 0)
+            {
+                await ShowNewDlcAddedDialog(totalDlcAdded);
             }
         }
 
-        private bool AddDownloadableContent(string path)
+        private bool AddDownloadableContent(string path, out int numDlcAdded)
         {
-            if (!File.Exists(path) || _downloadableContentContainerList.Any(x => x.ContainerPath == path))
+            numDlcAdded = 0;
+
+            if (!File.Exists(path))
             {
-                return true;
+                return false;
             }
 
-            using IFileSystem partitionFileSystem = PartitionFileSystemUtils.OpenApplicationFileSystem(path, _virtualFileSystem);
-
-            bool success = false;
-            foreach (DirectoryEntryEx fileEntry in partitionFileSystem.EnumerateEntries("/", "*.nca"))
+            if (!_applicationLibrary.TryGetDownloadableContentFromFile(path, out List<DownloadableContentModel> dlcs) || dlcs.Count == 0)
             {
-                using var ncaFile = new UniqueRef<IFile>();
+                return false;
+            }
 
-                partitionFileSystem.OpenFile(ref ncaFile.Ref, fileEntry.FullPath.ToU8Span(), OpenMode.Read).ThrowIfFailure();
+            List<DownloadableContentModel> dlcsForThisGame = dlcs.Where(it => it.TitleIdBase == _applicationData.IdBase).ToList();
+            if (dlcsForThisGame.Count == 0)
+            {
+                return false;
+            }
 
-                Nca nca = TryOpenNca(ncaFile.Get.AsStorage(), path);
-                if (nca == null)
+            foreach (DownloadableContentModel dlc in dlcsForThisGame)
+            {
+                if (!DownloadableContents.Contains(dlc))
                 {
-                    continue;
-                }
+                    DownloadableContents.Add(dlc);
+                    SelectedDownloadableContents.ReplaceOrAdd(dlc, dlc);
 
-                if (nca.Header.ContentType == NcaContentType.PublicData)
-                {
-                    if (nca.GetProgramIdBase() != _applicationData.IdBase)
-                    {
-                        continue;
-                    }
-
-                    var content = new DownloadableContentModel(nca.Header.TitleId.ToString("X16"), path, fileEntry.FullPath, true);
-                    DownloadableContents.Add(content);
-                    Dispatcher.UIThread.InvokeAsync(() => SelectedDownloadableContents.Add(content));
-
-                    success = true;
+                    numDlcAdded++;
                 }
             }
 
-            if (success)
+            if (numDlcAdded > 0)
             {
                 OnPropertyChanged(nameof(UpdateCount));
                 Sort();
             }
 
-            return success;
+            return true;
         }
 
         public void Remove(DownloadableContentModel model)
         {
-            DownloadableContents.Remove(model);
-            OnPropertyChanged(nameof(UpdateCount));
-            Sort();
+            SelectedDownloadableContents.Remove(model);
+
+            if (!model.IsBundled)
+            {
+                DownloadableContents.Remove(model);
+                OnPropertyChanged(nameof(UpdateCount));
+                Sort();
+            }
         }
 
         public void RemoveAll()
         {
-            DownloadableContents.Clear();
+            SelectedDownloadableContents.Clear();
+            DownloadableContents.RemoveMany(DownloadableContents.Where(it => !it.IsBundled));
+
             OnPropertyChanged(nameof(UpdateCount));
             Sort();
         }
 
         public void EnableAll()
         {
-            SelectedDownloadableContents = new(DownloadableContents);
+            SelectedDownloadableContents.Clear();
+            SelectedDownloadableContents.AddRange(DownloadableContents);
         }
 
         public void DisableAll()
@@ -302,43 +231,36 @@ namespace Ryujinx.Ava.UI.ViewModels
             SelectedDownloadableContents.Clear();
         }
 
-        public void Save()
+        public void Enable(DownloadableContentModel model)
         {
-            _downloadableContentContainerList.Clear();
-
-            DownloadableContentContainer container = default;
-
-            foreach (DownloadableContentModel downloadableContent in DownloadableContents)
-            {
-                if (container.ContainerPath != downloadableContent.ContainerPath)
-                {
-                    if (!string.IsNullOrWhiteSpace(container.ContainerPath))
-                    {
-                        _downloadableContentContainerList.Add(container);
-                    }
-
-                    container = new DownloadableContentContainer
-                    {
-                        ContainerPath = downloadableContent.ContainerPath,
-                        DownloadableContentNcaList = new List<DownloadableContentNca>(),
-                    };
-                }
-
-                container.DownloadableContentNcaList.Add(new DownloadableContentNca
-                {
-                    Enabled = downloadableContent.Enabled,
-                    TitleId = Convert.ToUInt64(downloadableContent.TitleId, 16),
-                    FullPath = downloadableContent.FullPath,
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(container.ContainerPath))
-            {
-                _downloadableContentContainerList.Add(container);
-            }
-
-            JsonHelper.SerializeToFile(_downloadableContentJsonPath, _downloadableContentContainerList, _serializerContext.ListDownloadableContentContainer);
+            SelectedDownloadableContents.ReplaceOrAdd(model, model);
         }
 
+        public void Disable(DownloadableContentModel model)
+        {
+            SelectedDownloadableContents.Remove(model);
+        }
+
+        public void Save()
+        {
+            List<(DownloadableContentModel it, bool)> dlcs = DownloadableContents.Select(it => (it, SelectedDownloadableContents.Contains(it))).ToList();
+            _applicationLibrary.SaveDownloadableContentsForGame(_applicationData, dlcs);
+        }
+
+        private Task ShowNewDlcAddedDialog(int numAdded)
+        {
+            string msg = string.Format(LocaleManager.Instance[LocaleKeys.DlcWindowDlcAddedMessage], numAdded);
+            return Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                await ContentDialogHelper.ShowTextDialog(
+                    LocaleManager.Instance[LocaleKeys.DialogConfirmationTitle], 
+                    msg, 
+                    string.Empty, 
+                    string.Empty, 
+                    string.Empty, 
+                    LocaleManager.Instance[LocaleKeys.InputDialogOk], 
+                    (int)Symbol.Checkmark);
+            });
+        }
     }
 }

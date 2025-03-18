@@ -1,265 +1,196 @@
 using Avalonia.Collections;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using LibHac.Common;
-using LibHac.Fs;
-using LibHac.Fs.Fsa;
-using LibHac.Ncm;
-using LibHac.Ns;
-using LibHac.Tools.FsSystem;
-using LibHac.Tools.FsSystem.NcaUtils;
+using CommunityToolkit.Mvvm.ComponentModel;
+using FluentAvalonia.UI.Controls;
 using Ryujinx.Ava.Common.Locale;
+using Ryujinx.Ava.Common.Models;
 using Ryujinx.Ava.UI.Helpers;
-using Ryujinx.Ava.UI.Models;
-using Ryujinx.Common.Configuration;
-using Ryujinx.Common.Logging;
-using Ryujinx.Common.Utilities;
-using Ryujinx.HLE.FileSystem;
-using Ryujinx.HLE.Loaders.Processes.Extensions;
-using Ryujinx.HLE.Utilities;
-using Ryujinx.UI.App.Common;
-using Ryujinx.UI.Common.Configuration;
-using System;
+using Ryujinx.Ava.Systems.AppLibrary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Application = Avalonia.Application;
-using ContentType = LibHac.Ncm.ContentType;
-using Path = System.IO.Path;
-using SpanHelpers = LibHac.Common.SpanHelpers;
 
 namespace Ryujinx.Ava.UI.ViewModels
 {
-    public class TitleUpdateViewModel : BaseModel
+    public record TitleUpdateViewModelNoUpdate;
+
+    public partial class TitleUpdateViewModel : BaseModel
     {
-        public TitleUpdateMetadata TitleUpdateWindowData;
-        public readonly string TitleUpdateJsonPath;
-        private VirtualFileSystem VirtualFileSystem { get; }
+        private ApplicationLibrary ApplicationLibrary { get; }
         private ApplicationData ApplicationData { get; }
 
-        private AvaloniaList<TitleUpdateModel> _titleUpdates = new();
-        private AvaloniaList<object> _views = new();
-        private object _selectedUpdate;
+        [ObservableProperty] private AvaloniaList<TitleUpdateModel> _titleUpdates = [];
+        [ObservableProperty] private AvaloniaList<object> _views = [];
+        [ObservableProperty] private object _selectedUpdate = new TitleUpdateViewModelNoUpdate();
+        [ObservableProperty] private bool _showBundledContentNotice;
 
-        private static readonly TitleUpdateMetadataJsonSerializerContext _serializerContext = new(JsonHelper.GetDefaultSerializerOptions());
+        private readonly IStorageProvider _storageProvider;
 
-        public AvaloniaList<TitleUpdateModel> TitleUpdates
+        public TitleUpdateViewModel(ApplicationLibrary applicationLibrary, ApplicationData applicationData)
         {
-            get => _titleUpdates;
-            set
-            {
-                _titleUpdates = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public AvaloniaList<object> Views
-        {
-            get => _views;
-            set
-            {
-                _views = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public object SelectedUpdate
-        {
-            get => _selectedUpdate;
-            set
-            {
-                _selectedUpdate = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public IStorageProvider StorageProvider;
-
-        public TitleUpdateViewModel(VirtualFileSystem virtualFileSystem, ApplicationData applicationData)
-        {
-            VirtualFileSystem = virtualFileSystem;
+            ApplicationLibrary = applicationLibrary;
 
             ApplicationData = applicationData;
 
-            if (Application.Current.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            {
-                StorageProvider = desktop.MainWindow.StorageProvider;
-            }
-
-            TitleUpdateJsonPath = Path.Combine(AppDataManager.GamesDirPath, ApplicationData.IdBaseString, "updates.json");
-
-            try
-            {
-                TitleUpdateWindowData = JsonHelper.DeserializeFromFile(TitleUpdateJsonPath, _serializerContext.TitleUpdateMetadata);
-            }
-            catch
-            {
-                Logger.Warning?.Print(LogClass.Application, $"Failed to deserialize title update data for {ApplicationData.IdBaseString} at {TitleUpdateJsonPath}");
-
-                TitleUpdateWindowData = new TitleUpdateMetadata
-                {
-                    Selected = "",
-                    Paths = new List<string>(),
-                };
-
-                Save();
-            }
+            _storageProvider = RyujinxApp.MainWindow.StorageProvider;
 
             LoadUpdates();
         }
 
         private void LoadUpdates()
         {
-            // Try to load updates from PFS first
-            AddUpdate(ApplicationData.Path, true);
+            (TitleUpdateModel TitleUpdate, bool IsSelected)[] updates = ApplicationLibrary.FindUpdateConfigurationFor(ApplicationData.Id);
 
-            foreach (string path in TitleUpdateWindowData.Paths)
+            bool hasBundledContent = false;
+            SelectedUpdate = new TitleUpdateViewModelNoUpdate();
+            foreach ((TitleUpdateModel update, bool isSelected) in updates)
             {
-                AddUpdate(path);
+                TitleUpdates.Add(update);
+                hasBundledContent = hasBundledContent || update.IsBundled;
+
+                if (isSelected)
+                {
+                    SelectedUpdate = update;
+                }
             }
 
-            TitleUpdateModel selected = TitleUpdates.FirstOrDefault(x => x.Path == TitleUpdateWindowData.Selected, null);
+            ShowBundledContentNotice = hasBundledContent;
 
-            SelectedUpdate = selected;
-
-            // NOTE: Save the list again to remove leftovers.
-            Save();
             SortUpdates();
         }
 
         public void SortUpdates()
         {
-            var sortedUpdates = TitleUpdates.OrderByDescending(update => update.Version);
+            IOrderedEnumerable<TitleUpdateModel> sortedUpdates = TitleUpdates.OrderByDescending(update => update.Version);
+
+            // NOTE(jpr): this works around a bug where calling Views.Clear also clears SelectedUpdate for
+            // some reason. so we save the item here and restore it after
+            object selected = SelectedUpdate;
 
             Views.Clear();
-            Views.Add(new BaseModel());
+            Views.Add(new TitleUpdateViewModelNoUpdate());
             Views.AddRange(sortedUpdates);
 
-            if (SelectedUpdate == null)
+            SelectedUpdate = selected;
+
+            if (SelectedUpdate is TitleUpdateViewModelNoUpdate)
             {
                 SelectedUpdate = Views[0];
             }
-            else if (!TitleUpdates.Contains(SelectedUpdate))
+            // this is mainly to handle a scenario where the user removes the selected update
+            else if (!TitleUpdates.Contains((TitleUpdateModel)SelectedUpdate))
             {
-                if (Views.Count > 1)
-                {
-                    SelectedUpdate = Views[1];
-                }
-                else
-                {
-                    SelectedUpdate = Views[0];
-                }
+                SelectedUpdate = Views.Count > 1 ? Views[1] : Views[0];
             }
         }
 
-        private void AddUpdate(string path, bool ignoreNotFound = false, bool selected = false)
+        private bool AddUpdate(string path, out int numUpdatesAdded)
         {
-            if (!File.Exists(path) || TitleUpdates.Any(x => x.Path == path))
+            numUpdatesAdded = 0;
+
+            if (!File.Exists(path))
             {
-                return;
+                return false;
             }
 
-            IntegrityCheckLevel checkLevel = ConfigurationState.Instance.System.EnableFsIntegrityChecks
-                ? IntegrityCheckLevel.ErrorOnInvalid
-                : IntegrityCheckLevel.None;
-
-            try
+            if (!ApplicationLibrary.TryGetTitleUpdatesFromFile(path, out List<TitleUpdateModel> updates))
             {
-                using IFileSystem pfs = PartitionFileSystemUtils.OpenApplicationFileSystem(path, VirtualFileSystem);
+                return false;
+            }
 
-                Dictionary<ulong, ContentMetaData> updates = pfs.GetContentData(ContentMetaType.Patch, VirtualFileSystem, checkLevel);
+            List<TitleUpdateModel> updatesForThisGame = updates.Where(it => it.TitleIdBase == ApplicationData.Id).ToList();
+            if (updatesForThisGame.Count == 0)
+            {
+                return false;
+            }
 
-                Nca patchNca = null;
-                Nca controlNca = null;
-
-                if (updates.TryGetValue(ApplicationData.Id, out ContentMetaData content))
+            foreach (TitleUpdateModel update in updatesForThisGame)
+            {
+                if (!TitleUpdates.Contains(update))
                 {
-                    patchNca = content.GetNcaByType(VirtualFileSystem.KeySet, ContentType.Program);
-                    controlNca = content.GetNcaByType(VirtualFileSystem.KeySet, ContentType.Control);
-                }
-
-                if (controlNca != null && patchNca != null)
-                {
-                    ApplicationControlProperty controlData = new();
-
-                    using UniqueRef<IFile> nacpFile = new();
-
-                    controlNca.OpenFileSystem(NcaSectionType.Data, IntegrityCheckLevel.None).OpenFile(ref nacpFile.Ref, "/control.nacp".ToU8Span(), OpenMode.Read).ThrowIfFailure();
-                    nacpFile.Get.Read(out _, 0, SpanHelpers.AsByteSpan(ref controlData), ReadOption.None).ThrowIfFailure();
-
-                    var displayVersion = controlData.DisplayVersionString.ToString();
-                    var update = new TitleUpdateModel(content.Version.Version, displayVersion, path);
-
                     TitleUpdates.Add(update);
+                    SelectedUpdate = update;
 
-                    if (selected)
-                    {
-                        Dispatcher.UIThread.InvokeAsync(() => SelectedUpdate = update);
-                    }
-                }
-                else
-                {
-                    if (!ignoreNotFound)
-                    {
-                        Dispatcher.UIThread.InvokeAsync(() => ContentDialogHelper.CreateErrorDialog(LocaleManager.Instance[LocaleKeys.DialogUpdateAddUpdateErrorMessage]));
-                    }
+                    numUpdatesAdded++;
                 }
             }
-            catch (Exception ex)
+
+            if (numUpdatesAdded > 0)
             {
-                Dispatcher.UIThread.InvokeAsync(() => ContentDialogHelper.CreateErrorDialog(LocaleManager.Instance.UpdateAndGetDynamicValue(LocaleKeys.DialogLoadFileErrorMessage, ex.Message, path)));
+                SortUpdates();
             }
+
+            return true;
         }
 
         public void RemoveUpdate(TitleUpdateModel update)
         {
-            TitleUpdates.Remove(update);
+            if (!update.IsBundled)
+            {
+                TitleUpdates.Remove(update);
+            }
+            else if (update == SelectedUpdate as TitleUpdateModel)
+            {
+                SelectedUpdate = new TitleUpdateViewModelNoUpdate();
+            }
 
             SortUpdates();
         }
 
         public async Task Add()
         {
-            var result = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            IReadOnlyList<IStorageFile> result = await _storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 AllowMultiple = true,
                 FileTypeFilter = new List<FilePickerFileType>
                 {
                     new(LocaleManager.Instance[LocaleKeys.AllSupportedFormats])
                     {
-                        Patterns = new[] { "*.nsp" },
-                        AppleUniformTypeIdentifiers = new[] { "com.ryujinx.nsp" },
-                        MimeTypes = new[] { "application/x-nx-nsp" },
+                        Patterns = ["*.nsp"],
+                        AppleUniformTypeIdentifiers = ["com.ryujinx.nsp"],
+                        MimeTypes = ["application/x-nx-nsp"],
                     },
                 },
             });
 
-            foreach (var file in result)
+            int totalUpdatesAdded = 0;
+            foreach (IStorageFile file in result)
             {
-                AddUpdate(file.Path.LocalPath, selected: true);
+                if (!AddUpdate(file.Path.LocalPath, out int newUpdatesAdded))
+                {
+                    await ContentDialogHelper.CreateErrorDialog(LocaleManager.Instance[LocaleKeys.DialogUpdateAddUpdateErrorMessage]);
+                }
+
+                totalUpdatesAdded += newUpdatesAdded;
             }
 
-            SortUpdates();
+            if (totalUpdatesAdded > 0)
+            {
+                await ShowNewUpdatesAddedDialog(totalUpdatesAdded);
+            }
         }
 
         public void Save()
         {
-            TitleUpdateWindowData.Paths.Clear();
-            TitleUpdateWindowData.Selected = "";
+            List<(TitleUpdateModel it, bool)> updates = TitleUpdates.Select(it => (it, it == SelectedUpdate as TitleUpdateModel)).ToList();
+            ApplicationLibrary.SaveTitleUpdatesForGame(ApplicationData, updates);
+        }
 
-            foreach (TitleUpdateModel update in TitleUpdates)
-            {
-                TitleUpdateWindowData.Paths.Add(update.Path);
-
-                if (update == SelectedUpdate)
-                {
-                    TitleUpdateWindowData.Selected = update.Path;
-                }
-            }
-
-            JsonHelper.SerializeToFile(TitleUpdateJsonPath, TitleUpdateWindowData, _serializerContext.TitleUpdateMetadata);
+        private Task ShowNewUpdatesAddedDialog(int numAdded)
+        {
+            string msg = string.Format(LocaleManager.Instance[LocaleKeys.UpdateWindowUpdateAddedMessage], numAdded);
+            return Dispatcher.UIThread.InvokeAsync(async () => 
+                await ContentDialogHelper.ShowTextDialog(
+                    LocaleManager.Instance[LocaleKeys.DialogConfirmationTitle], 
+                    msg, 
+                    string.Empty, 
+                    string.Empty, 
+                    string.Empty, 
+                    LocaleManager.Instance[LocaleKeys.InputDialogOk], 
+                    (int)Symbol.Checkmark
+                ));
         }
     }
 }
