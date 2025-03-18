@@ -30,6 +30,24 @@ jobs:
       - name: Check GitHub API Rate Limits
         run: gh api rate_limit
 
+      - name: Delete Existing Releases
+        run: |
+          set -e
+          DEST_REPO="ADEMOLA200/RyuNX"
+          echo "🚨 Deleting all existing releases in $DEST_REPO..."
+
+          EXISTING_TAGS=$(gh api --paginate "/repos/$DEST_REPO/releases" --jq '.[].tag_name')
+
+          if [ -z "$EXISTING_TAGS" ]; then
+              echo "✅ No existing releases found."
+          else
+              for TAG in $EXISTING_TAGS; do
+                  echo "🗑️ Deleting release: $TAG"
+                  gh release delete "$TAG" -R "$DEST_REPO" --yes || echo "⚠️ Failed to delete $TAG"
+              done
+              echo "✅ All releases deleted!"
+          fi
+
       - name: Fetch and Migrate Releases
         run: |
           set -e
@@ -37,19 +55,16 @@ jobs:
           DEST_REPO="ADEMOLA200/RyuNX"
 
           SOURCE_TAGS=$(gh api --paginate "/repos/$SOURCE_REPO/releases" --jq '.[].tag_name')
-          DEST_TAGS=$(gh api --paginate "/repos/$DEST_REPO/releases" --jq '.[].tag_name')
 
-          MISSING_RELEASES=$(comm -23 <(echo "$SOURCE_TAGS" | sort) <(echo "$DEST_TAGS" | sort))
-
-          if [ -z "$MISSING_RELEASES" ]; then
-              echo "All releases already migrated. Nothing to do."
-              exit 0
+          if [ -z "$SOURCE_TAGS" ]; then
+              echo "❌ No releases found in source repository!"
+              exit 1
           fi
 
-          echo "Found missing releases:"
-          echo "$MISSING_RELEASES"
+          echo "Found releases to migrate:"
+          echo "$SOURCE_TAGS"
 
-          for TAG in $MISSING_RELEASES; do
+          for TAG in $SOURCE_TAGS; do
               echo "🚀 Processing release: $TAG"
               
               ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
