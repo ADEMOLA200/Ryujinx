@@ -1,8 +1,8 @@
 <h1 align="center">
-  <br>
+  <!-- <br> -->
   <a href="https://ryujinx.org/"><img src="https://raw.githubusercontent.com/Ryujinx/Ryujinx/master/distribution/misc/Logo.svg" alt="Ryujinx" width="150"></a>
   <br>
-  <b>Ryujinx</b>
+  <!-- <b>Ryujinx</b> -->
   <br>
   <sub><sup><b>(REE-YOU-JINX)</b></sup></sub>
   <br>
