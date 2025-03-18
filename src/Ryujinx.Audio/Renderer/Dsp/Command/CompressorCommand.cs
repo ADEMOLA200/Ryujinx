@@ -184,7 +184,7 @@ namespace Ryujinx.Audio.Renderer.Dsp.Command
                 state.CompressionGainAverage = compressionGainAverage;
                 state.PreviousCompressionEmaAlpha = previousCompressionEmaAlpha;
             }
-            else
+            else 
             {
                 for (int i = 0; i < _parameter.ChannelCount; i++)
                 {
