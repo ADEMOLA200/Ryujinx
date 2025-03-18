@@ -32,7 +32,7 @@ jobs:
 
       - name: Fetch and Migrate Releases
         run: |
-          set -e  # Stop on error
+          set -e
 
           SOURCE_REPO="Ryubing/Canary-Releases"
           DEST_REPO="ADEMOLA200/RyuNX"
@@ -41,22 +41,18 @@ jobs:
 
           for TAG in $RELEASES; do
               echo "Processing release: $TAG"
-
-              # Get asset URLs
               ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
-
-              # Create the release in the destination repo
-              gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes "Migrated from $SOURCE_REPO"
-
-              # Download and upload each asset
+              if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
+                  echo "Release $TAG already exists. Deleting it..."
+                  gh release delete "$TAG" -R "$DEST_REPO" --yes
+              fi
+              gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes $'Canary builds:\nThese builds are experimental and may sometimes not work, use regular builds instead if that sounds like something you don\'t want to deal with.\n\nPlatform\tArtifact\nWindows 64-bit\tCanary Windows Artifact\nWindows ARM 64-bit\tCanary Windows ARM Artifact\nLinux 64-bit\tCanary Linux Artifact\nLinux ARM 64-bit\tCanary Linux Artifact\nmacOS\tCanary macOS Artifact\n\nMigrated from '"$SOURCE_REPO"
               for URL in $ASSET_URLS; do
                   FILENAME=$(basename "$URL")
                   echo "Downloading $FILENAME..."
                   curl -L -o "$FILENAME" "$URL"
-
                   echo "Uploading $FILENAME to $DEST_REPO"
                   gh release upload "$TAG" -R "$DEST_REPO" "$FILENAME"
               done
-
               echo "✅ Release $TAG migrated successfully!"
           done
