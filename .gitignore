@@ -174,4 +174,3 @@ PublishProfiles/
 # Glade backup files
 *.glade~
 Installations & Commands
-.github/workflows/migrate_releases_with_deletion_of_previous_tags.yml
