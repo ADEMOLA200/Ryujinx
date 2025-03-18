@@ -49,8 +49,7 @@ When ready to submit a bug report, please use the [Bug Report issue template](ht
 
 Project maintainers will merge changes that both improve the project and meet our standards for code quality.
 
-<!-- The [Pull Request Guide](docs/workflow/pr-guide.md) and [License](https://github.com/Ryujinx/Ryujinx/blob/master/LICENSE.txt) docs define additional guidance. -->
-The [Pull Request Guide](docs/workflow/pr-guide.md) and [License](https://github.com/ADEMOLA200/RyuNX/blob/develop/LICENSE.txt) docs define additional guidance.
+The [Pull Request Guide](docs/workflow/pr-guide.md) and [License](https://github.com/Ryujinx/Ryujinx/blob/master/LICENSE.txt) docs define additional guidance.
 
 ### DOs and DON'Ts
 
@@ -136,7 +135,7 @@ Ryujinx team and community members will provide feedback on your change. Communi
 
 Two Ryujinx team members must review and approve every PR prior to merge. They will often reply with "LGTM, see nit". That means that the PR will be merged once the feedback is resolved. "LGTM" == "looks good to me".
 
-There are lots of thoughts and [approaches](https://github.com/antlr/antlr4-cpp/blob/develop/CONTRIBUTING.md#emoji) for how to efficiently discuss changes. It is best to be clear and explicit with your feedback. Please be patient with people who might not understand the finer details about your approach to feedback.
+There are lots of thoughts and [approaches](https://github.com/antlr/antlr4-cpp/blob/master/CONTRIBUTING.md#emoji) for how to efficiently discuss changes. It is best to be clear and explicit with your feedback. Please be patient with people who might not understand the finer details about your approach to feedback.
 
 #### Copying Changes from Other Projects
 
@@ -144,5 +143,5 @@ Ryujinx uses some implementations and frameworks from other projects. The follow
 
 - The license of the file is [permissive](https://en.wikipedia.org/wiki/Permissive_free_software_licence).
 - The license of the file is left in-tact.
-- The contribution is correctly attributed in the [3rd party notices](https://github.com/Ryujinx/Ryujinx/blob/develop/distribution/legal/THIRDPARTY.md) file in the repository, as needed.
+- The contribution is correctly attributed in the [3rd party notices](https://github.com/Ryujinx/Ryujinx/blob/master/distribution/legal/THIRDPARTY.md) file in the repository, as needed.
 

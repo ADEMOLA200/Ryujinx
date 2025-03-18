@@ -209,4 +209,8 @@ jobs:
           git config user.email "${{ env.GIT_COMMITTER_EMAIL }}"
           git add .
           git commit -m "$COMMIT_MESSAGE"
+<<<<<<< HEAD
           git push origin master
+=======
+          git push origin master
+>>>>>>> old-repo/master
