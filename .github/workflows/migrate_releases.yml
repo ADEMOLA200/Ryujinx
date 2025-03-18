@@ -41,12 +41,26 @@ jobs:
 
           for TAG in $RELEASES; do
               echo "Processing release: $TAG"
-              ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
               if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
-                  echo "Release $TAG already exists. Deleting it..."
-                  gh release delete "$TAG" -R "$DEST_REPO" --yes
+                  echo "Release $TAG already exists in $DEST_REPO. Skipping..."
+                  continue
               fi
-              gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes $'Canary builds:\nThese builds are experimental and may sometimes not work, use regular builds instead if that sounds like something you don\'t want to deal with.\n\nPlatform\tArtifact\nWindows 64-bit\tCanary Windows Artifact\nWindows ARM 64-bit\tCanary Windows ARM Artifact\nLinux 64-bit\tCanary Linux Artifact\nLinux ARM 64-bit\tCanary Linux Artifact\nmacOS\tCanary macOS Artifact\n\nMigrated from '"$SOURCE_REPO"
+              ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
+              DESCRIPTION="## Canary builds:
+
+              These builds are experimental and may sometimes not work, use [regular builds](https://github.com/Ryujinx/release-channel-master/releases) instead if that sounds like something you don't want to deal with.
+
+              | Platform           | Artifact                     |
+              |--------------------|------------------------------|
+              | Windows 64-bit     | Canary Windows Artifact      |
+              | Windows ARM 64-bit | Canary Windows ARM Artifact  |
+              | Linux 64-bit       | Canary Linux Artifact        |
+              | Linux ARM 64-bit   | Canary Linux Artifact        |
+              | macOS              | Canary macOS Artifact        |
+
+              Migrated from $SOURCE_REPO"
+              DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^              //g')
+              gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes "$DESCRIPTION_CLEANED"
               for URL in $ASSET_URLS; do
                   FILENAME=$(basename "$URL")
                   echo "Downloading $FILENAME..."
