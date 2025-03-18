@@ -30,38 +30,6 @@ jobs:
       - name: Check GitHub API Rate Limits
         run: gh api rate_limit
 
-      - name: Delete All Releases & Tags
-        run: |
-          set -e
-          DEST_REPO="ADEMOLA200/RyuNX"
-          echo "🚨 Deleting all existing releases and tags in $DEST_REPO..."
-
-          # Fetch all releases
-          RELEASES=$(gh api --paginate "/repos/$DEST_REPO/releases" --jq '.[].id')
-          
-          if [ -z "$RELEASES" ]; then
-              echo "✅ No releases found."
-          else
-              for RELEASE_ID in $RELEASES; do
-                  echo "🗑️ Deleting release ID: $RELEASE_ID"
-                  gh api -X DELETE "/repos/$DEST_REPO/releases/$RELEASE_ID" || echo "⚠️ Failed to delete release ID $RELEASE_ID"
-              done
-              echo "✅ All releases deleted!"
-          fi
-
-          # Delete all tags
-          TAGS=$(gh api --paginate "/repos/$DEST_REPO/git/refs/tags" --jq '.[].ref' | sed 's|refs/tags/||')
-
-          if [ -z "$TAGS" ]; then
-              echo "✅ No tags found."
-          else
-              for TAG in $TAGS; do
-                  echo "🗑️ Deleting tag: $TAG"
-                  gh api -X DELETE "/repos/$DEST_REPO/git/refs/tags/$TAG" || echo "⚠️ Failed to delete tag $TAG"
-              done
-              echo "✅ All tags deleted!"
-          fi
-
       - name: Fetch and Migrate Releases
         run: |
           set -e
@@ -75,12 +43,18 @@ jobs:
               exit 1
           fi
 
-          echo "Found releases to migrate:"
+          echo "Found releases to process:"
           echo "$SOURCE_TAGS"
 
           for TAG in $SOURCE_TAGS; do
               echo "🚀 Processing release: $TAG"
-              
+
+              # Check if the release already exists in the destination repository
+              if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
+                  echo "⏭️ Release $TAG already exists. Skipping..."
+                  continue
+              fi
+
               ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
 
               DESCRIPTION="## Canary builds:
@@ -95,7 +69,8 @@ jobs:
               | Linux ARM 64-bit   | Canary Linux ARM Artifact    |
               | macOS              | Canary macOS Artifact        |"
 
-              DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^              //g')
+              # Remove any extra indentation
+              DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^ *//g')
 
               gh release create "$TAG" -R "$DEST_REPO" \
                 --title "$TAG" \
