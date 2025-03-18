@@ -30,22 +30,36 @@ jobs:
       - name: Check GitHub API Rate Limits
         run: gh api rate_limit
 
-      - name: Delete Existing Releases
+      - name: Delete All Releases & Tags
         run: |
           set -e
           DEST_REPO="ADEMOLA200/RyuNX"
-          echo "🚨 Deleting all existing releases in $DEST_REPO..."
+          echo "🚨 Deleting all existing releases and tags in $DEST_REPO..."
 
-          EXISTING_TAGS=$(gh api --paginate "/repos/$DEST_REPO/releases" --jq '.[].tag_name')
-
-          if [ -z "$EXISTING_TAGS" ]; then
-              echo "✅ No existing releases found."
+          # Fetch all releases
+          RELEASES=$(gh api --paginate "/repos/$DEST_REPO/releases" --jq '.[].id')
+          
+          if [ -z "$RELEASES" ]; then
+              echo "✅ No releases found."
           else
-              for TAG in $EXISTING_TAGS; do
-                  echo "🗑️ Deleting release: $TAG"
-                  gh release delete "$TAG" -R "$DEST_REPO" --yes || echo "⚠️ Failed to delete $TAG"
+              for RELEASE_ID in $RELEASES; do
+                  echo "🗑️ Deleting release ID: $RELEASE_ID"
+                  gh api -X DELETE "/repos/$DEST_REPO/releases/$RELEASE_ID" || echo "⚠️ Failed to delete release ID $RELEASE_ID"
               done
               echo "✅ All releases deleted!"
+          fi
+
+          # Delete all tags
+          TAGS=$(gh api --paginate "/repos/$DEST_REPO/git/refs/tags" --jq '.[].ref' | sed 's|refs/tags/||')
+
+          if [ -z "$TAGS" ]; then
+              echo "✅ No tags found."
+          else
+              for TAG in $TAGS; do
+                  echo "🗑️ Deleting tag: $TAG"
+                  gh api -X DELETE "/repos/$DEST_REPO/git/refs/tags/$TAG" || echo "⚠️ Failed to delete tag $TAG"
+              done
+              echo "✅ All tags deleted!"
           fi
 
       - name: Fetch and Migrate Releases
