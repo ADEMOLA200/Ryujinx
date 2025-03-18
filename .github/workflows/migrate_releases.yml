@@ -35,14 +35,25 @@ jobs:
           set -e
           SOURCE_REPO="Ryubing/Canary-Releases"
           DEST_REPO="ADEMOLA200/RyuNX"
-          RELEASES=$(gh release list -R "$SOURCE_REPO" --limit 1000 --json tagName -q '.[].tagName')
-          for TAG in $RELEASES; do
-              echo "Processing release: $TAG"
-              if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
-                  echo "Release $TAG already exists in $DEST_REPO. Skipping..."
-                  continue
-              fi
+
+          SOURCE_TAGS=$(gh api --paginate "/repos/$SOURCE_REPO/releases" --jq '.[].tag_name')
+          DEST_TAGS=$(gh api --paginate "/repos/$DEST_REPO/releases" --jq '.[].tag_name')
+
+          MISSING_RELEASES=$(comm -23 <(echo "$SOURCE_TAGS" | sort) <(echo "$DEST_TAGS" | sort))
+
+          if [ -z "$MISSING_RELEASES" ]; then
+              echo "All releases already migrated. Nothing to do."
+              exit 0
+          fi
+
+          echo "Found missing releases:"
+          echo "$MISSING_RELEASES"
+
+          for TAG in $MISSING_RELEASES; do
+              echo "🚀 Processing release: $TAG"
+              
               ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
+
               DESCRIPTION="## Canary builds:
 
               These builds are experimental and may sometimes not work, use [regular builds](https://github.com/Ryujinx/release-channel-master/releases) instead if that sounds like something you don't want to deal with.
@@ -52,16 +63,24 @@ jobs:
               | Windows 64-bit     | Canary Windows Artifact      |
               | Windows ARM 64-bit | Canary Windows ARM Artifact  |
               | Linux 64-bit       | Canary Linux Artifact        |
-              | Linux ARM 64-bit   | Canary Linux Artifact        |
+              | Linux ARM 64-bit   | Canary Linux ARM Artifact    |
               | macOS              | Canary macOS Artifact        |"
+
               DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^              //g')
-              gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes "$DESCRIPTION_CLEANED"
+
+              gh release create "$TAG" -R "$DEST_REPO" \
+                --title "$TAG" \
+                --notes "$DESCRIPTION_CLEANED"
+
               for URL in $ASSET_URLS; do
                   FILENAME=$(basename "$URL")
-                  echo "Downloading $FILENAME..."
+                  echo "📥 Downloading $FILENAME..."
                   curl -L -o "$FILENAME" "$URL"
-                  echo "Uploading $FILENAME to $DEST_REPO"
-                  gh release upload "$TAG" -R "$DEST_REPO" "$FILENAME"
+                  echo "📤 Uploading $FILENAME..."
+                  gh release upload "$TAG" -R "$DEST_REPO" "$FILENAME" || echo "⚠️ Failed to upload $FILENAME"
+                  rm -f "$FILENAME"
               done
-              echo "✅ Release $TAG migrated successfully!"
+
+              echo "✅ Successfully migrated release $TAG!"
+              sleep 1
           done
