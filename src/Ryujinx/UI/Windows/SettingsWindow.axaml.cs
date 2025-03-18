@@ -1,35 +1,45 @@
 using Avalonia.Controls;
-using FluentAvalonia.Core;
 using FluentAvalonia.UI.Controls;
 using Ryujinx.Ava.Common.Locale;
+using Ryujinx.Ava.Systems.Configuration;
 using Ryujinx.Ava.UI.ViewModels;
 using Ryujinx.HLE.FileSystem;
+using Ryujinx.Input;
 using System;
+using System.Linq;
 
 namespace Ryujinx.Ava.UI.Windows
 {
-    public partial class SettingsWindow : StyleableWindow
+    public partial class SettingsWindow : StyleableAppWindow
     {
-        internal SettingsViewModel ViewModel { get; set; }
+        internal readonly SettingsViewModel ViewModel;
 
-        public SettingsWindow(VirtualFileSystem virtualFileSystem, ContentManager contentManager)
+        public SettingsWindow(VirtualFileSystem virtualFileSystem, ContentManager contentManager) : base(true)
         {
-            Title = $"Ryujinx {Program.Version} - {LocaleManager.Instance[LocaleKeys.Settings]}";
+            Title = RyujinxApp.FormatTitle(LocaleKeys.Settings);
 
-            ViewModel = new SettingsViewModel(virtualFileSystem, contentManager);
-            DataContext = ViewModel;
+            DataContext = ViewModel = new SettingsViewModel(virtualFileSystem, contentManager);
 
             ViewModel.CloseWindow += Close;
             ViewModel.SaveSettingsEvent += SaveSettings;
 
             InitializeComponent();
+
+            NavPanel.PaneDisplayMode =
+                ConfigurationState.Instance.ShowOldUI
+                    ? NavigationViewPaneDisplayMode.Left
+                    : NavigationViewPaneDisplayMode.Top;
+
+            Height = ConfigurationState.Instance.ShowOldUI
+                ? 906
+                : 954; // nav panel is put on top with custom title bar so account for new height
+            
             Load();
         }
 
         public SettingsWindow()
         {
-            ViewModel = new SettingsViewModel();
-            DataContext = ViewModel;
+            DataContext = ViewModel = new SettingsViewModel();
 
             InitializeComponent();
             Load();
@@ -39,7 +49,7 @@ namespace Ryujinx.Ava.UI.Windows
         {
             InputPage.InputView?.SaveCurrentProfile();
 
-            if (Owner is MainWindow window && ViewModel.DirectoryChanged)
+            if (Owner is MainWindow window && ViewModel.GameListNeedsRefresh)
             {
                 window.LoadApplications();
             }
@@ -82,10 +92,15 @@ namespace Ryujinx.Ava.UI.Windows
                         NavPanel.Content = AudioPage;
                         break;
                     case "NetworkPage":
+                        NetworkPage.ViewModel = ViewModel;
                         NavPanel.Content = NetworkPage;
                         break;
                     case "LoggingPage":
                         NavPanel.Content = LoggingPage;
+                        break;
+                    case nameof(HacksPage):
+                        HacksPage.DataContext = ViewModel;
+                        NavPanel.Content = HacksPage;
                         break;
                     default:
                         throw new NotImplementedException();
@@ -96,6 +111,12 @@ namespace Ryujinx.Ava.UI.Windows
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             HotkeysPage.Dispose();
+            
+            foreach (IGamepad gamepad in RyujinxApp.MainWindow.InputManager.GamepadDriver.GetGamepads())
+            {
+                gamepad?.ClearLed();
+            }
+            
             InputPage.Dispose();
             base.OnClosing(e);
         }

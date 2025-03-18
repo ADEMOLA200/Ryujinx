@@ -15,55 +15,55 @@ namespace Ryujinx.HLE
     /// <summary>
     /// HLE configuration.
     /// </summary>
-    public class HLEConfiguration
+    public class HleConfiguration
     {
         /// <summary>
         /// The virtual file system used by the FS service.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        internal readonly VirtualFileSystem VirtualFileSystem;
+        internal VirtualFileSystem VirtualFileSystem { get; private set; }
 
         /// <summary>
         /// The manager for handling a LibHac Horizon instance.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        internal readonly LibHacHorizonManager LibHacHorizonManager;
+        internal LibHacHorizonManager LibHacHorizonManager { get; private set; }
 
         /// <summary>
         /// The account manager used by the account service.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        internal readonly AccountManager AccountManager;
+        internal AccountManager AccountManager { get; private set; }
 
         /// <summary>
         /// The content manager used by the NCM service.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        internal readonly ContentManager ContentManager;
+        internal ContentManager ContentManager { get; private set; }
 
         /// <summary>
         /// The persistent information between run for multi-application capabilities.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        public readonly UserChannelPersistence UserChannelPersistence;
+        public UserChannelPersistence UserChannelPersistence { get; private set; }
 
         /// <summary>
         /// The GPU renderer to use for all GPU operations.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        internal readonly IRenderer GpuRenderer;
+        internal IRenderer GpuRenderer { get; private set; }
 
         /// <summary>
         /// The audio device driver to use for all audio operations.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        internal readonly IHardwareDeviceDriver AudioDeviceDriver;
+        internal IHardwareDeviceDriver AudioDeviceDriver { get; private set; }
 
         /// <summary>
         /// The handler for various UI related operations needed outside of HLE.
         /// </summary>
         /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
-        internal readonly IHostUIHandler HostUIHandler;
+        internal IHostUIHandler HostUIHandler { get; private set; }
 
         /// <summary>
         /// Control the memory configuration used by the emulation context.
@@ -84,9 +84,14 @@ namespace Ryujinx.HLE
         internal readonly RegionCode Region;
 
         /// <summary>
-        /// Control the initial state of the vertical sync in the SurfaceFlinger service.
+        /// Control the initial state of the present interval in the SurfaceFlinger service (previously Vsync).
         /// </summary>
-        internal readonly bool EnableVsync;
+        internal readonly VSyncMode VSyncMode;
+
+        /// <summary>
+        /// Control the custom VSync interval, if enabled and active.
+        /// </summary>
+        internal readonly int CustomVSyncInterval;
 
         /// <summary>
         /// Control the initial state of the docked mode.
@@ -165,22 +170,35 @@ namespace Ryujinx.HLE
         public MultiplayerMode MultiplayerMode { internal get; set; }
 
         /// <summary>
+        /// Disable P2P mode
+        /// </summary>
+        public bool MultiplayerDisableP2p { internal get; set; }
+
+        /// <summary>
+        /// Multiplayer Passphrase
+        /// </summary>
+        public string MultiplayerLdnPassphrase { internal get; set; }
+
+        /// <summary>
+        /// LDN Server
+        /// </summary>
+        public string MultiplayerLdnServer { internal get; set; }
+
+        /// <summary>
         /// An action called when HLE force a refresh of output after docked mode changed.
         /// </summary>
         public Action RefreshInputConfig { internal get; set; }
+        
+        /// <summary>
+        ///     The desired hacky workarounds.
+        /// </summary>
+        /// <remarks>This cannot be changed after <see cref="Switch"/> instantiation.</remarks>
+        public EnabledDirtyHack[] Hacks { internal get; set; }
 
-        public HLEConfiguration(VirtualFileSystem virtualFileSystem,
-                                LibHacHorizonManager libHacHorizonManager,
-                                ContentManager contentManager,
-                                AccountManager accountManager,
-                                UserChannelPersistence userChannelPersistence,
-                                IRenderer gpuRenderer,
-                                IHardwareDeviceDriver audioDeviceDriver,
-                                MemoryConfiguration memoryConfiguration,
-                                IHostUIHandler hostUIHandler,
+        public HleConfiguration(MemoryConfiguration memoryConfiguration,
                                 SystemLanguage systemLanguage,
                                 RegionCode region,
-                                bool enableVsync,
+                                VSyncMode vSyncMode,
                                 bool enableDockedMode,
                                 bool enablePtc,
                                 bool enableInternetAccess,
@@ -194,20 +212,18 @@ namespace Ryujinx.HLE
                                 float audioVolume,
                                 bool useHypervisor,
                                 string multiplayerLanInterfaceId,
-                                MultiplayerMode multiplayerMode)
+                                MultiplayerMode multiplayerMode,
+                                bool multiplayerDisableP2p,
+                                string multiplayerLdnPassphrase,
+                                string multiplayerLdnServer,
+                                int customVSyncInterval,
+                                EnabledDirtyHack[] dirtyHacks = null)
         {
-            VirtualFileSystem = virtualFileSystem;
-            LibHacHorizonManager = libHacHorizonManager;
-            AccountManager = accountManager;
-            ContentManager = contentManager;
-            UserChannelPersistence = userChannelPersistence;
-            GpuRenderer = gpuRenderer;
-            AudioDeviceDriver = audioDeviceDriver;
             MemoryConfiguration = memoryConfiguration;
-            HostUIHandler = hostUIHandler;
             SystemLanguage = systemLanguage;
             Region = region;
-            EnableVsync = enableVsync;
+            VSyncMode = vSyncMode;
+            CustomVSyncInterval = customVSyncInterval;
             EnableDockedMode = enableDockedMode;
             EnablePtc = enablePtc;
             EnableInternetAccess = enableInternetAccess;
@@ -222,6 +238,35 @@ namespace Ryujinx.HLE
             UseHypervisor = useHypervisor;
             MultiplayerLanInterfaceId = multiplayerLanInterfaceId;
             MultiplayerMode = multiplayerMode;
+            MultiplayerDisableP2p = multiplayerDisableP2p;
+            MultiplayerLdnPassphrase = multiplayerLdnPassphrase;
+            MultiplayerLdnServer = multiplayerLdnServer;
+            Hacks = dirtyHacks ?? [];
+        }
+
+        /// <summary>
+        /// Set the pre-configured services to use for this <see cref="HleConfiguration"/> instance.
+        /// </summary>
+        public HleConfiguration Configure(
+            VirtualFileSystem virtualFileSystem,
+            LibHacHorizonManager libHacHorizonManager,
+            ContentManager contentManager,
+            AccountManager accountManager,
+            UserChannelPersistence userChannelPersistence,
+            IRenderer gpuRenderer,
+            IHardwareDeviceDriver audioDeviceDriver,
+            IHostUIHandler hostUIHandler
+        )
+        {
+            VirtualFileSystem = virtualFileSystem;
+            LibHacHorizonManager = libHacHorizonManager;
+            AccountManager = accountManager;
+            ContentManager = contentManager;
+            UserChannelPersistence = userChannelPersistence;
+            GpuRenderer = gpuRenderer;
+            AudioDeviceDriver = audioDeviceDriver;
+            HostUIHandler = hostUIHandler;
+            return this;
         }
     }
 }

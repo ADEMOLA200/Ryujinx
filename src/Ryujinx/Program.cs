@@ -1,20 +1,27 @@
 using Avalonia;
 using Avalonia.Threading;
+using DiscordRPC;
+using Gommon;
+using Projektanker.Icons.Avalonia;
+using Projektanker.Icons.Avalonia.FontAwesome;
+using Projektanker.Icons.Avalonia.MaterialDesign;
+using Ryujinx.Ava.Systems;
 using Ryujinx.Ava.UI.Helpers;
 using Ryujinx.Ava.UI.Windows;
+using Ryujinx.Ava.Utilities;
+using Ryujinx.Ava.Systems.Configuration;
+using Ryujinx.Ava.Systems.Configuration.System;
+using Ryujinx.Ava.Utilities.SystemInfo;
 using Ryujinx.Common;
 using Ryujinx.Common.Configuration;
 using Ryujinx.Common.GraphicsDriver;
 using Ryujinx.Common.Logging;
 using Ryujinx.Common.SystemInterop;
 using Ryujinx.Graphics.Vulkan.MoltenVK;
-using Ryujinx.Modules;
+using Ryujinx.Headless;
 using Ryujinx.SDL2.Common;
-using Ryujinx.UI.Common;
-using Ryujinx.UI.Common.Configuration;
-using Ryujinx.UI.Common.Helper;
-using Ryujinx.UI.Common.SystemInfo;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -27,57 +34,70 @@ namespace Ryujinx.Ava
         public static double DesktopScaleFactor { get; set; } = 1.0;
         public static string Version { get; private set; }
         public static string ConfigurationPath { get; private set; }
+        public static string GlobalConfigurationPath { get; private set; }
         public static bool PreviewerDetached { get; private set; }
         public static bool UseHardwareAcceleration { get; private set; }
+        public static string BackendThreadingArg { get; private set; }
 
         [LibraryImport("user32.dll", SetLastError = true)]
-        public static partial int MessageBoxA(IntPtr hWnd, [MarshalAs(UnmanagedType.LPStr)] string text, [MarshalAs(UnmanagedType.LPStr)] string caption, uint type);
+        public static partial int MessageBoxA(nint hWnd, [MarshalAs(UnmanagedType.LPStr)] string text, [MarshalAs(UnmanagedType.LPStr)] string caption, uint type);
 
         private const uint MbIconwarning = 0x30;
 
-        public static void Main(string[] args)
+        public static int Main(string[] args)
         {
             Version = ReleaseInformation.Version;
-
-            if (OperatingSystem.IsWindows() && !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17134))
+            
+            if (OperatingSystem.IsWindows() && !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
             {
-                _ = MessageBoxA(IntPtr.Zero, "You are running an outdated version of Windows.\n\nRyujinx supports Windows 10 version 1803 and newer.\n", $"Ryujinx {Version}", MbIconwarning);
+                _ = MessageBoxA(nint.Zero, "You are running an outdated version of Windows.\n\nRyujinx supports Windows 10 version 20H1 and newer.\n", $"Ryujinx {Version}", MbIconwarning);
+                return 0;
             }
 
             PreviewerDetached = true;
+            
+            if (args.Length > 0 && args[0] is "--no-gui" or "nogui")
+            {
+                HeadlessRyujinx.Entrypoint(args[1..]);
+                return 0;
+            }
 
             Initialize(args);
-
+            
             LoggerAdapter.Register();
 
-            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            IconProvider.Current
+                .Register<FontAwesomeIconProvider>()
+                .Register<MaterialDesignIconProvider>();
+
+            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 
-        public static AppBuilder BuildAvaloniaApp()
-        {
-            return AppBuilder.Configure<App>()
+        public static AppBuilder BuildAvaloniaApp() =>
+            AppBuilder.Configure<RyujinxApp>()
                 .UsePlatformDetect()
                 .With(new X11PlatformOptions
                 {
                     EnableMultiTouch = true,
                     EnableIme = true,
                     EnableInputFocusProxy = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") == "gamescope",
-                    RenderingMode = UseHardwareAcceleration ?
-                        new[] { X11RenderingMode.Glx, X11RenderingMode.Software } :
-                        new[] { X11RenderingMode.Software },
+                    RenderingMode = UseHardwareAcceleration
+                        ? [X11RenderingMode.Glx, X11RenderingMode.Software]
+                        : [X11RenderingMode.Software]
                 })
                 .With(new Win32PlatformOptions
                 {
                     WinUICompositionBackdropCornerRadius = 8.0f,
-                    RenderingMode = UseHardwareAcceleration ?
-                        new[] { Win32RenderingMode.AngleEgl, Win32RenderingMode.Software } :
-                        new[] { Win32RenderingMode.Software },
-                })
-                .UseSkia();
-        }
+                    RenderingMode = UseHardwareAcceleration
+                        ? [Win32RenderingMode.AngleEgl, Win32RenderingMode.Software]
+                        : [Win32RenderingMode.Software]
+                });
 
         private static void Initialize(string[] args)
         {
+            // Ensure Discord presence timestamp begins at the absolute start of when Ryujinx is launched
+            DiscordIntegrationModule.EmulatorStartedAt = Timestamps.Now;
+
             // Parse arguments
             CommandLineState.ParseArguments(args);
 
@@ -89,12 +109,17 @@ namespace Ryujinx.Ava
             // Delete backup files after updating.
             Task.Run(Updater.CleanupUpdate);
 
-            Console.Title = $"Ryujinx Console {Version}";
+            Console.Title = $"{RyujinxApp.FullAppName} Console {Version}";
 
             // Hook unhandled exception and process exit events.
-            AppDomain.CurrentDomain.UnhandledException += (sender, e) => ProcessUnhandledException(e.ExceptionObject as Exception, e.IsTerminating);
-            AppDomain.CurrentDomain.ProcessExit += (sender, e) => Exit();
+            AppDomain.CurrentDomain.UnhandledException += (sender, e)
+                => ProcessUnhandledException(sender, e.ExceptionObject as Exception, e.IsTerminating);
+            TaskScheduler.UnobservedTaskException += (sender, e)
+                => ProcessUnhandledException(sender, e.Exception, false); 
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => Exit();
 
+
+            
             // Setup base data directory.
             AppDataManager.Initialize(CommandLineState.BaseDirPathArg);
 
@@ -135,10 +160,37 @@ namespace Ryujinx.Ava
             }
         }
 
+        public static string GetDirGameUserConfig(string gameId, bool rememberGlobalDir = false, bool changeFolderForGame = false)
+        {
+            if (string.IsNullOrEmpty(gameId))
+            {
+                return "";
+            }
+
+            string gameDir = Path.Combine(AppDataManager.GamesDirPath, gameId, ReleaseInformation.ConfigName);
+
+            // Should load with the game if there is a custom setting for the game
+            if (rememberGlobalDir)
+            {
+                GlobalConfigurationPath = ConfigurationPath;
+            }
+
+            if (changeFolderForGame)
+            {
+                ConfigurationPath = gameDir;
+            }
+
+            return gameDir;
+        }
+
         public static void ReloadConfig()
         {
+            //It is necessary that when a user setting appears, the global setting remains available
+            GlobalConfigurationPath = null;
+
             string localConfigurationPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ReleaseInformation.ConfigName);
             string appDataConfigurationPath = Path.Combine(AppDataManager.BaseDirPath, ReleaseInformation.ConfigName);
+
 
             // Now load the configuration as the other subsystems are now registered
             if (File.Exists(localConfigurationPath))
@@ -175,81 +227,131 @@ namespace Ryujinx.Ava
                 }
             }
 
-            UseHardwareAcceleration = ConfigurationState.Instance.EnableHardwareAcceleration.Value;
+            UseHardwareAcceleration = ConfigurationState.Instance.EnableHardwareAcceleration;
 
             // Check if graphics backend was overridden
-            if (CommandLineState.OverrideGraphicsBackend != null)
+            if (CommandLineState.OverrideGraphicsBackend is not null)
+                ConfigurationState.Instance.Graphics.GraphicsBackend.Value = CommandLineState.OverrideGraphicsBackend.ToLower() switch
+                {
+                    "opengl" => GraphicsBackend.OpenGl,
+                    "vulkan" => GraphicsBackend.Vulkan,
+                    _ => ConfigurationState.Instance.Graphics.GraphicsBackend
+                };
+
+            // Check if backend threading was overridden
+            if (CommandLineState.OverrideBackendThreading is not null)
+                ConfigurationState.Instance.Graphics.BackendThreading.Value = CommandLineState.OverrideBackendThreading.ToLower() switch
+                {
+                    "auto" => BackendThreading.Auto,
+                    "off" => BackendThreading.Off,
+                    "on" => BackendThreading.On,
+                    _ => ConfigurationState.Instance.Graphics.BackendThreading
+                };
+
+            if (CommandLineState.OverrideBackendThreadingAfterReboot is not null)
             {
-                if (CommandLineState.OverrideGraphicsBackend.ToLower() == "opengl")
-                {
-                    ConfigurationState.Instance.Graphics.GraphicsBackend.Value = GraphicsBackend.OpenGl;
-                }
-                else if (CommandLineState.OverrideGraphicsBackend.ToLower() == "vulkan")
-                {
-                    ConfigurationState.Instance.Graphics.GraphicsBackend.Value = GraphicsBackend.Vulkan;
-                }
+                BackendThreadingArg = CommandLineState.OverrideBackendThreadingAfterReboot;
             }
 
             // Check if docked mode was overriden.
             if (CommandLineState.OverrideDockedMode.HasValue)
-            {
                 ConfigurationState.Instance.System.EnableDockedMode.Value = CommandLineState.OverrideDockedMode.Value;
-            }
+
 
             // Check if HideCursor was overridden.
             if (CommandLineState.OverrideHideCursor is not null)
-            {
-                ConfigurationState.Instance.HideCursor.Value = CommandLineState.OverrideHideCursor!.ToLower() switch
+                ConfigurationState.Instance.HideCursor.Value = CommandLineState.OverrideHideCursor.ToLower() switch
                 {
                     "never" => HideCursorMode.Never,
                     "onidle" => HideCursorMode.OnIdle,
                     "always" => HideCursorMode.Always,
-                    _ => ConfigurationState.Instance.HideCursor.Value,
+                    _ => ConfigurationState.Instance.HideCursor,
                 };
-            }
+
+            // Check if memoryManagerMode was overridden. 
+            if (CommandLineState.OverrideMemoryManagerMode is not null)
+                if (Enum.TryParse(CommandLineState.OverrideMemoryManagerMode, true, out MemoryManagerMode result))
+                {
+                    ConfigurationState.Instance.System.MemoryManagerMode.Value = result;
+                }
+
+            // Check if PPTC was overridden. 
+            if (CommandLineState.OverridePPTC is not null)
+                if (Enum.TryParse(CommandLineState.OverridePPTC, true, out bool result))
+                {
+                    ConfigurationState.Instance.System.EnablePtc.Value = result;
+                }
+
+            // Check if region was overridden. 
+            if (CommandLineState.OverrideSystemRegion is not null)
+                if (Enum.TryParse(CommandLineState.OverrideSystemRegion, true, out HLE.HOS.SystemState.RegionCode result))
+                {
+                    ConfigurationState.Instance.System.Region.Value = result.ToUI();
+                }
+
+            //Check if language was overridden. 
+            if (CommandLineState.OverrideSystemLanguage is not null)
+                if (Enum.TryParse(CommandLineState.OverrideSystemLanguage, true, out HLE.HOS.SystemState.SystemLanguage result))
+                {
+                    ConfigurationState.Instance.System.Language.Value = result.ToUI();
+                }
 
             // Check if hardware-acceleration was overridden.
             if (CommandLineState.OverrideHardwareAcceleration != null)
-            {
                 UseHardwareAcceleration = CommandLineState.OverrideHardwareAcceleration.Value;
-            }
         }
 
-        private static void PrintSystemInfo()
+        internal static void PrintSystemInfo()
         {
-            Logger.Notice.Print(LogClass.Application, $"Ryujinx Version: {Version}");
+            Logger.Notice.Print(LogClass.Application, $"{RyujinxApp.FullAppName} Version: {Version}");
+            Logger.Notice.Print(LogClass.Application, $".NET Runtime: {RuntimeInformation.FrameworkDescription}");
             SystemInfo.Gather().Print();
 
-            Logger.Notice.Print(LogClass.Application, $"Logs Enabled: {(Logger.GetEnabledLevels().Count == 0 ? "<None>" : string.Join(", ", Logger.GetEnabledLevels()))}");
+            Logger.Notice.Print(LogClass.Application, $"Logs Enabled: {
+                Logger.GetEnabledLevels()
+                    .FormatCollection(
+                        x => x.ToString(), 
+                        separator: ", ", 
+                        emptyCollectionFallback: "<None>")
+            }");
 
-            if (AppDataManager.Mode == AppDataManager.LaunchMode.Custom)
+            Logger.Notice.Print(LogClass.Application,
+                AppDataManager.Mode == AppDataManager.LaunchMode.Custom
+                    ? $"Launch Mode: Custom Path {AppDataManager.BaseDirPath}"
+                    : $"Launch Mode: {AppDataManager.Mode}");
+        }
+
+        internal static void ProcessUnhandledException(object sender, Exception initialException, bool isTerminating)
+        {
+            Logger.Log log = Logger.Error ?? Logger.Notice;
+
+            List<Exception> exceptions = [];
+
+            if (initialException is AggregateException ae)
             {
-                Logger.Notice.Print(LogClass.Application, $"Launch Mode: Custom Path {AppDataManager.BaseDirPath}");
+                exceptions.AddRange(ae.InnerExceptions);
             }
             else
             {
-                Logger.Notice.Print(LogClass.Application, $"Launch Mode: {AppDataManager.Mode}");
+                exceptions.Add(initialException);
             }
-        }
 
-        private static void ProcessUnhandledException(Exception ex, bool isTerminating)
-        {
-            string message = $"Unhandled exception caught: {ex}";
-
-            Logger.Error?.PrintMsg(LogClass.Application, message);
-
-            if (Logger.Error == null)
+            foreach (Exception e in exceptions)
             {
-                Logger.Notice.PrintMsg(LogClass.Application, message);
+                string message = $"Unhandled exception caught: {e}";
+                // ReSharper disable once ConstantConditionalAccessQualifier
+                if (sender?.GetType()?.AsPrettyString() is { } senderName)
+                    log.Print(LogClass.Application, message, senderName);
+                else
+                    log.PrintMsg(LogClass.Application, message);
             }
-
+            
+            
             if (isTerminating)
-            {
                 Exit();
-            }
         }
 
-        public static void Exit()
+        internal static void Exit()
         {
             DiscordIntegrationModule.Exit();
 

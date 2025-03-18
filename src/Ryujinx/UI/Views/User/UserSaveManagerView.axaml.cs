@@ -1,4 +1,3 @@
-using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using FluentAvalonia.UI.Controls;
@@ -23,10 +22,8 @@ using UserId = LibHac.Fs.UserId;
 
 namespace Ryujinx.Ava.UI.Views.User
 {
-    public partial class UserSaveManagerView : UserControl
+    public partial class UserSaveManagerView : RyujinxControl<UserSaveManagerViewModel>
     {
-        internal UserSaveManagerViewModel ViewModel { get; private set; }
-
         private AccountManager _accountManager;
         private HorizonClient _horizonClient;
         private VirtualFileSystem _virtualFileSystem;
@@ -48,7 +45,7 @@ namespace Ryujinx.Ava.UI.Views.User
                 switch (arg.NavigationMode)
                 {
                     case NavigationMode.New:
-                        var (parent, accountManager, client, virtualFileSystem) = ((NavigationDialogHost parent, AccountManager accountManager, HorizonClient client, VirtualFileSystem virtualFileSystem))arg.Parameter;
+                        (NavigationDialogHost parent, AccountManager accountManager, HorizonClient client, VirtualFileSystem virtualFileSystem) = ((NavigationDialogHost parent, AccountManager accountManager, HorizonClient client, VirtualFileSystem virtualFileSystem))arg.Parameter;
                         _accountManager = accountManager;
                         _horizonClient = client;
                         _virtualFileSystem = virtualFileSystem;
@@ -66,16 +63,16 @@ namespace Ryujinx.Ava.UI.Views.User
 
         public void LoadSaves()
         {
-            ViewModel.Saves.Clear();
-            var saves = new ObservableCollection<SaveModel>();
-            var saveDataFilter = SaveDataFilter.Make(
+            Dispatcher.UIThread.Post(() => ViewModel.Saves.Clear());
+            ObservableCollection<SaveModel> saves = [];
+            SaveDataFilter saveDataFilter = SaveDataFilter.Make(
                 programId: default,
                 saveType: SaveDataType.Account,
                 new UserId((ulong)_accountManager.LastOpenedUser.UserId.High, (ulong)_accountManager.LastOpenedUser.UserId.Low),
                 saveDataId: default,
                 index: default);
 
-            using var saveDataIterator = new UniqueRef<SaveDataIterator>();
+            using UniqueRef<SaveDataIterator> saveDataIterator = new();
 
             _horizonClient.Fs.OpenSaveDataIterator(ref saveDataIterator.Ref, SaveDataSpaceId.User, in saveDataFilter).ThrowIfFailure();
 
@@ -92,10 +89,10 @@ namespace Ryujinx.Ava.UI.Views.User
 
                 for (int i = 0; i < readCount; i++)
                 {
-                    var save = saveDataInfo[i];
+                    SaveDataInfo save = saveDataInfo[i];
                     if (save.ProgramId.Value != 0)
                     {
-                        var saveModel = new SaveModel(save);
+                        SaveModel saveModel = new(save);
                         saves.Add(saveModel);
                     }
                 }
@@ -130,10 +127,11 @@ namespace Ryujinx.Ava.UI.Views.User
             {
                 if (button.DataContext is SaveModel saveModel)
                 {
-                    var result = await ContentDialogHelper.CreateConfirmationDialog(LocaleManager.Instance[LocaleKeys.DeleteUserSave],
+                    UserResult result = await ContentDialogHelper.CreateConfirmationDialog(LocaleManager.Instance[LocaleKeys.DeleteUserSave],
                         LocaleManager.Instance[LocaleKeys.IrreversibleActionNote],
                         LocaleManager.Instance[LocaleKeys.InputDialogYes],
-                        LocaleManager.Instance[LocaleKeys.InputDialogNo], "");
+                        LocaleManager.Instance[LocaleKeys.InputDialogNo], 
+                        string.Empty);
 
                     if (result == UserResult.Yes)
                     {

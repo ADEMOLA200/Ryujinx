@@ -41,11 +41,7 @@ namespace Ryujinx.Ava.UI.Helpers
 
             if (_isWaitingForInput)
             {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    Cancel();
-                });
-
+                Dispatcher.UIThread.Post(() => Cancel());
                 return;
             }
 
@@ -87,8 +83,13 @@ namespace Ryujinx.Ava.UI.Helpers
 
                 ToggledButton.IsChecked = false;
 
-                ButtonAssigned?.Invoke(this, new ButtonAssignedEventArgs(ToggledButton, pressedButton));
+                if (pressedButton.HasValue && pressedButton.Value.AsHidType<Key>() == Key.BackSpace)
+                {
+                    ButtonAssigned?.Invoke(this, new ButtonAssignedEventArgs(ToggledButton, new Button(Key.Unbound)));
+                    return;
+                }
 
+                ButtonAssigned?.Invoke(this, new ButtonAssignedEventArgs(ToggledButton, pressedButton));
             });
         }
 
