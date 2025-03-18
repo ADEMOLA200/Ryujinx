@@ -137,10 +137,10 @@ This folder is located in the user folder, which can be accessed by clicking `Op
   The emulator has settings for enabling or disabling some logging, remapping controllers, and more.
   You can configure all of them through the graphical interface or manually through the config file, `Config.json`, found in the user folder which can be accessed by clicking `Open Ryujinx Folder` under the File menu in the GUI.
 
-## Contact
+<!-- ## Contact
 
 If you have contributions, suggestions, need emulator support or just want to get in touch with the team, join our [Discord server](https://discord.com/invite/Ryujinx).
-You may also review our [FAQ](https://github.com/Ryujinx/Ryujinx/wiki/Frequently-Asked-Questions).
+You may also review our [FAQ](https://github.com/Ryujinx/Ryujinx/wiki/Frequently-Asked-Questions). -->
 
 <!-- ## Donations
 
