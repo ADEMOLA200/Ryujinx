@@ -17,10 +17,20 @@ namespace Ryujinx.Ava.UI.Applet
 {
     public partial class ProfileSelectorDialog : RyujinxControl<ProfileSelectorDialogViewModel>
     {
+        /// <summary>
+        /// Parameterless constructor required for XAML runtime instantiation.
+        /// </summary>
+        public ProfileSelectorDialog() : this(new ProfileSelectorDialogViewModel())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the ProfileSelectorDialog with the specified view model.
+        /// </summary>
+        /// <param name="viewModel">The view model to use as the DataContext.</param>
         public ProfileSelectorDialog(ProfileSelectorDialogViewModel viewModel)
         {
             DataContext = ViewModel = viewModel;
-            
             InitializeComponent();
         }
         
@@ -53,13 +63,13 @@ namespace Ryujinx.Ava.UI.Applet
                         ViewModel.SelectedUserId = userProfile.UserId;
                         Logger.Info?.Print(LogClass.UI, $"Selected: {userProfile.UserId}", "ProfileSelector");
 
-                        ObservableCollection<BaseModel> newProfiles = [];
+                        ObservableCollection<BaseModel> newProfiles = new ObservableCollection<BaseModel>();
 
                         foreach (BaseModel item in ViewModel.Profiles)
                         {
                             if (item is UserProfile originalItem)
                             {
-                                UserProfileSft profile = new(originalItem.UserId, originalItem.Name, originalItem.Image);
+                                UserProfileSft profile = new UserProfileSft(originalItem.UserId, originalItem.Name, originalItem.Image);
                                 
                                 if (profile.UserId == ViewModel.SelectedUserId)
                                 {
@@ -78,7 +88,7 @@ namespace Ryujinx.Ava.UI.Applet
 
         public static async Task<(UserId Id, bool Result)> ShowInputDialog(ProfileSelectorDialogViewModel viewModel)
         {
-            ContentDialog contentDialog = new()
+            ContentDialog contentDialog = new ContentDialog
             {
                 Title = LocaleManager.Instance[LocaleKeys.UserProfileWindowTitle],
                 PrimaryButtonText = LocaleManager.Instance[LocaleKeys.Continue],
