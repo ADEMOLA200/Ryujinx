@@ -5,13 +5,25 @@ using Ryujinx.Ava.UI.ViewModels;
 using System;
 using System.Linq;
 
-
 namespace Ryujinx.Ava.UI.Windows
 {
     public partial class GameSpecificSettingsWindow : StyleableAppWindow
     {
         internal readonly SettingsViewModel ViewModel;
 
+        /// <summary>
+        /// Parameterless constructor required for XAML runtime instantiation.
+        /// Creates a default MainWindowViewModel instance.
+        /// </summary>
+        public GameSpecificSettingsWindow() : this(new MainWindowViewModel(), true)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of GameSpecificSettingsWindow.
+        /// </summary>
+        /// <param name="viewModel">The main window view model.</param>
+        /// <param name="findUserConfigDir">Indicates whether to find the user configuration directory.</param>
         public GameSpecificSettingsWindow(MainWindowViewModel viewModel, bool findUserConfigDir = true)
         {
             Title = string.Format(LocaleManager.Instance[LocaleKeys.SettingsWithInfo], viewModel.SelectedApplication.Name, viewModel.SelectedApplication.IdString);
@@ -38,7 +50,6 @@ namespace Ryujinx.Ava.UI.Windows
             InputPage.InputView?.SaveCurrentProfile();
         }
 
-
         private void Load()
         {
             Pages.Children.Clear();
@@ -48,7 +59,6 @@ namespace Ryujinx.Ava.UI.Windows
 
         private void NavPanelOnSelectionChanged(object sender, NavigationViewSelectionChangedEventArgs e)
         {
-            
             if (e.SelectedItem is NavigationViewItem navItem && navItem.Tag is not null)
             {
                 switch (navItem.Tag.ToString())
