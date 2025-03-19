@@ -35,7 +35,13 @@
 </p>
 
 <p align="center">
-    <img src="https://git.ryujinx.app/ryubing/ryujinx/-/raw/master/docs/shell.png?ref_type=heads&inline=false" alt="Ryujinx example">
+    <img src="https://github.com/user-attachments/assets/a25f858d-1b5b-403e-b0c4-3d8ff01c9eb7" alt="Ryujinx example">
+</p>
+
+<br>
+
+<p align="center">
+    <img src="https://github.com/user-attachments/assets/897bf015-37cb-48c3-bbae-8292842f0f28" alt="Ryujinx run">
 </p>
 
 ## Usage
