@@ -6,8 +6,8 @@ using System.Runtime.CompilerServices;
 namespace Ryujinx.Memory
 {
     /// <summary>
-    /// Represents a address space manager.
-    /// Supports virtual memory region mapping, address translation and read/write access to mapped regions.
+    /// Represents an address space manager.
+    /// Supports virtual memory region mapping, address translation, and read/write access to mapped regions.
     /// </summary>
     public sealed class AddressSpaceManager : VirtualMemoryManagerBase, IVirtualMemoryManager
     {
@@ -15,7 +15,7 @@ namespace Ryujinx.Memory
         public bool UsesPrivateAllocations => false;
 
         /// <summary>
-        /// Address space width in bits.
+        /// Gets the address space width in bits.
         /// </summary>
         public int AddressSpaceBits { get; }
 
@@ -27,10 +27,11 @@ namespace Ryujinx.Memory
         /// <summary>
         /// Creates a new instance of the memory manager.
         /// </summary>
-        /// <param name="backingMemory">Physical backing memory where virtual memory will be mapped to</param>
-        /// <param name="addressSpaceSize">Size of the address space</param>
+        /// <param name="backingMemory">The physical backing memory to which virtual memory will be mapped.</param>
+        /// <param name="addressSpaceSize">The desired size of the virtual address space.</param>
         public AddressSpaceManager(MemoryBlock backingMemory, ulong addressSpaceSize)
         {
+            // Calculate the minimum address space size as a power-of-two not less than the given size.
             ulong asSize = PageSize;
             int asBits = PageBits;
 
@@ -51,9 +52,12 @@ namespace Ryujinx.Memory
         {
             AssertValidAddressAndSize(va, size);
 
+            // Map each page individually.
             while (size != 0)
             {
-                _pageTable.Map(va, (nuint)(ulong)_backingMemory.GetPointer(pa, PageSize));
+                // Get the host pointer for the given physical address.
+                nuint hostPtr = (nuint)(ulong)_backingMemory.GetPointer(pa, PageSize);
+                _pageTable.Map(va, hostPtr);
 
                 va += PageSize;
                 pa += PageSize;
@@ -61,10 +65,12 @@ namespace Ryujinx.Memory
             }
         }
 
+        /// <inheritdoc/>
         public override void MapForeign(ulong va, nuint hostPointer, ulong size)
         {
             AssertValidAddressAndSize(va, size);
 
+            // Map foreign memory pages.
             while (size != 0)
             {
                 _pageTable.Map(va, hostPointer);
@@ -80,10 +86,10 @@ namespace Ryujinx.Memory
         {
             AssertValidAddressAndSize(va, size);
 
+            // Unmap each page individually.
             while (size != 0)
             {
                 _pageTable.Unmap(va);
-
                 va += PageSize;
                 size -= PageSize;
             }
@@ -92,6 +98,7 @@ namespace Ryujinx.Memory
         /// <inheritdoc/>
         public unsafe ref T GetRef<T>(ulong va) where T : unmanaged
         {
+            // Ensure that the memory region is contiguous for the requested type.
             if (!IsContiguous(va, Unsafe.SizeOf<T>()))
             {
                 ThrowMemoryNotContiguous();
@@ -122,6 +129,7 @@ namespace Ryujinx.Memory
                 yield break;
             }
 
+            // Use host regions to calculate corresponding physical regions.
             IEnumerable<HostMemoryRange> hostRegions = GetHostRegionsImpl(va, size);
             if (hostRegions == null)
             {
@@ -140,6 +148,12 @@ namespace Ryujinx.Memory
             }
         }
 
+        /// <summary>
+        /// Helper method to aggregate contiguous host memory regions.
+        /// </summary>
+        /// <param name="va">The starting virtual address.</param>
+        /// <param name="size">The size of the region to evaluate.</param>
+        /// <returns>An enumerable of contiguous host memory ranges.</returns>
         private IEnumerable<HostMemoryRange> GetHostRegionsImpl(ulong va, ulong size)
         {
             if (!ValidateAddress(va) || !ValidateAddressAndSize(va, size))
@@ -148,33 +162,42 @@ namespace Ryujinx.Memory
             }
 
             int pages = GetPagesCount(va, size, out va);
-
+            // Initialize region aggregation with the host address corresponding to the starting virtual address.
             nuint regionStart = GetHostAddress(va);
             ulong regionSize = PageSize;
+            nuint previousHostAddress = regionStart;
 
-            for (int page = 0; page < pages - 1; page++)
+            // Process subsequent pages to aggregate contiguous regions.
+            for (int page = 1; page < pages; page++)
             {
-                if (!ValidateAddress(va + PageSize))
+                ulong currentVA = va + (ulong)(page * PageSize);
+                if (!ValidateAddress(currentVA))
                 {
                     yield break;
                 }
 
-                nuint newHostAddress = GetHostAddress(va + PageSize);
+                nuint currentHostAddress = GetHostAddress(currentVA);
 
-                if (GetHostAddress(va) + PageSize != newHostAddress)
+                // Check if the current page is contiguous with the previous page.
+                if (previousHostAddress + PageSize != currentHostAddress)
                 {
+                    // Yield the aggregated contiguous region.
                     yield return new HostMemoryRange(regionStart, regionSize);
-                    regionStart = newHostAddress;
-                    regionSize = 0;
+                    regionStart = currentHostAddress;
+                    regionSize = PageSize;
+                }
+                else
+                {
+                    regionSize += PageSize;
                 }
 
-                va += PageSize;
-                regionSize += PageSize;
+                previousHostAddress = currentHostAddress;
             }
 
             yield return new HostMemoryRange(regionStart, regionSize);
         }
 
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override bool IsMapped(ulong va)
         {
@@ -200,7 +223,6 @@ namespace Ryujinx.Memory
             }
 
             int pages = GetPagesCount(va, (uint)size, out va);
-
             for (int page = 0; page < pages; page++)
             {
                 if (!IsMapped(va))
@@ -214,14 +236,21 @@ namespace Ryujinx.Memory
             return true;
         }
 
+        /// <summary>
+        /// Calculates the host address corresponding to a given virtual address.
+        /// </summary>
+        /// <param name="va">The virtual address.</param>
+        /// <returns>The computed host address.</returns>
         private nuint GetHostAddress(ulong va)
         {
+            // Combines the mapped base pointer from the page table with the offset within the page.
             return _pageTable.Read(va) + (nuint)(va & PageMask);
         }
 
         /// <inheritdoc/>
         public void Reprotect(ulong va, ulong size, MemoryPermission protection)
         {
+            // If needed, implement protection changes on the mapped pages.
         }
 
         /// <inheritdoc/>
@@ -230,14 +259,36 @@ namespace Ryujinx.Memory
             throw new NotImplementedException();
         }
 
+        /// <summary>
+        /// Returns a Memory&lt;byte&gt; instance wrapping the physical memory starting at the specified address.
+        /// </summary>
+        /// <param name="pa">The physical address.</param>
+        /// <param name="size">The size of the memory region.</param>
+        /// <returns>A Memory&lt;byte&gt; instance representing the physical memory.</returns>
         protected unsafe override Memory<byte> GetPhysicalAddressMemory(nuint pa, int size)
             => new NativeMemoryManager<byte>((byte*)pa, size).Memory;
 
+        /// <summary>
+        /// Returns a Span&lt;byte&gt; instance wrapping the physical memory starting at the specified address.
+        /// </summary>
+        /// <param name="pa">The physical address.</param>
+        /// <param name="size">The size of the memory region.</param>
+        /// <returns>A Span&lt;byte&gt; instance representing the physical memory.</returns>
         protected override unsafe Span<byte> GetPhysicalAddressSpan(nuint pa, int size) => new((void*)pa, size);
 
+        /// <summary>
+        /// Translates a virtual address to a host address (checked).
+        /// </summary>
+        /// <param name="va">The virtual address.</param>
+        /// <returns>The corresponding host address.</returns>
         protected override nuint TranslateVirtualAddressChecked(ulong va)
             => GetHostAddress(va);
 
+        /// <summary>
+        /// Translates a virtual address to a host address (unchecked).
+        /// </summary>
+        /// <param name="va">The virtual address.</param>
+        /// <returns>The corresponding host address.</returns>
         protected override nuint TranslateVirtualAddressUnchecked(ulong va)
             => GetHostAddress(va);
     }
