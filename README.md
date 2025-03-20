@@ -37,11 +37,9 @@
 <p align="center">
     <img src="https://github.com/user-attachments/assets/a25f858d-1b5b-403e-b0c4-3d8ff01c9eb7" alt="Ryujinx example">
 </p>
-
 <br>
-
 <p align="center">
-    <img src="https://github.com/user-attachments/assets/897bf015-37cb-48c3-bbae-8292842f0f28" alt="Ryujinx run">
+    <img src="https://github.com/user-attachments/assets/446e82c8-0d4f-440b-a23a-2fac6e22924e" alt="Ryujinx run">
 </p>
 
 ## Usage
