@@ -1,4 +1,4 @@
-name: Migrate Releases with Auto Changelog
+name: Migrate Releases from Multiple Sources with Auto Changelog
 
 on:
   workflow_dispatch:
@@ -30,71 +30,102 @@ jobs:
       - name: Check GitHub API Rate Limits
         run: gh api rate_limit
 
-      - name: Clone Source Repository for Changelog Generation
+      - name: Clone Source Repositories
         run: |
-          SOURCE_REPO="Ryubing/Canary-Releases"
-          git clone https://github.com/$SOURCE_REPO.git source-canary
+          git clone https://github.com/Ryubing/Canary-Releases.git source-canary
           cd source-canary
+          git fetch --tags
+          cd ..
+          git clone https://github.com/Goodfeat/Ruy-Nightly-Canary.git source-nightly
+          cd source-nightly
           git fetch --tags
         working-directory: ${{ github.workspace }}
 
-      - name: Fetch and Migrate Releases with Changelog URL
+      - name: Migrate Releases from Multiple Sources
         run: |
           set -e
-          SOURCE_REPO="Ryubing/Canary-Releases"
           DEST_REPO="ADEMOLA200/RyuNX"
-          SOURCE_TAGS=$(gh api --paginate "/repos/$SOURCE_REPO/releases" --jq '.[].tag_name')
-          if [ -z "$SOURCE_TAGS" ]; then
-            echo "❌ No releases found in source repository!"
-            exit 1
-          fi
-          echo "Found releases to process:"
-          echo "$SOURCE_TAGS"
-          for TAG in $SOURCE_TAGS; do
-            echo "🚀 Processing release: $TAG"
-            if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
-              echo "⏭️ Release $TAG already exists. Skipping..."
-              continue
-            fi
-            cd source-canary
-            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-              PREV_TAG=""
-              CHANGELOG_URL="https://github.com/Ryubing/Canary-Releases/releases/$TAG"
-            else
-              PREV_TAG=$(git tag --sort=-v:refname | awk "/^$TAG\$/{found=1; next} found{print; exit}")
-              if [ -z "$PREV_TAG" ]; then
-                CHANGELOG_URL="https://github.com/Ryubing/Canary-Releases/releases/$TAG"
-              else
-                CHANGELOG_URL="https://github.com/Ryubing/Canary-Releases/compare/Canary-${PREV_TAG}...Canary-${TAG}"
-              fi
-            fi
-            cd ..
-            DESCRIPTION="## Canary builds:
-
-          These builds are experimental and may sometimes not work, use [regular builds](https://github.com/Ryujinx/release-channel-master/releases) instead if that sounds like something you don't want to deal with.
-
-          | Platform           | Artifact                     |
+          
+          for SOURCE in "canary" "nightly"; do
+            if [ "$SOURCE" = "canary" ]; then
+              SOURCE_REPO="Ryubing/Canary-Releases"
+              SOURCE_DIR="source-canary"
+              RELEASE_TYPE="Canary"
+              CHANGLOG_URL_PREFIX="Canary-"
+              RELEASE_NOTE_HEADER="## Canary builds:"
+              TABLE="| Platform           | Artifact                     |
           |--------------------|------------------------------|
           | Windows 64-bit     | Canary Windows Artifact      |
           | Windows ARM 64-bit | Canary Windows ARM Artifact  |
           | Linux 64-bit       | Canary Linux Artifact        |
           | Linux ARM 64-bit   | Canary Linux Artifact        |
-          | macOS              | Canary macOS Artifact        |
+          | macOS              | Canary macOS Artifact        |"
+                        LINK_BASE="https://github.com/Ryubing/Canary-Releases"
+                      elif [ "$SOURCE" = "nightly" ]; then
+                        SOURCE_REPO="Goodfeat/Ruy-Nightly-Canary"
+                        SOURCE_DIR="source-nightly"
+                        RELEASE_TYPE="Nightly"
+                        CHANGLOG_URL_PREFIX="Nightly-"
+                        RELEASE_NOTE_HEADER="## Nightly builds:"
+                        TABLE="| Platform           | Artifact                     |
+          |--------------------|------------------------------|
+          | Windows 64-bit     | Nightly Windows Artifact     |
+          | Windows ARM 64-bit | Nightly Windows ARM Artifact |
+          | Linux 64-bit       | Nightly Linux Artifact       |
+          | Linux ARM 64-bit   | Nightly Linux Artifact       |
+          | macOS              | Nightly macOS Artifact       |"
+              LINK_BASE="https://github.com/Goodfeat/Ruy-Nightly-Canary"
+            fi
 
-          **Changelog:** ${CHANGELOG_URL}
-          "
-            DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^ *//g')
-            gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes "$DESCRIPTION_CLEANED"
-            ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
-            for URL in $ASSET_URLS; do
-              FILENAME=$(basename "$URL")
-              echo "📥 Downloading $FILENAME..."
-              curl -L -o "$FILENAME" "$URL"
-              echo "📤 Uploading $FILENAME..."
-              gh release upload "$TAG" -R "$DEST_REPO" "$FILENAME" || echo "⚠️ Failed to upload $FILENAME"
-              rm -f "$FILENAME"
+            echo "Processing releases from $SOURCE_REPO"
+            SOURCE_TAGS=$(gh api --paginate "/repos/$SOURCE_REPO/releases" --jq '.[].tag_name')
+            if [ -z "$SOURCE_TAGS" ]; then
+              echo "❌ No releases found in $SOURCE_REPO!"
+              continue
+            fi
+            echo "Found releases:"
+            echo "$SOURCE_TAGS"
+            for TAG in $SOURCE_TAGS; do
+              echo "🚀 Processing release: $TAG from $SOURCE"
+              if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
+                echo "⏭️ Release $TAG already exists. Skipping..."
+                continue
+              fi
+
+              cd $SOURCE_DIR
+              if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+                PREV_TAG=""
+                CHANGELOG_URL="${LINK_BASE}/releases/$TAG"
+              else
+                PREV_TAG=$(git tag --sort=-v:refname | awk "/^$TAG\$/{found=1; next} found{print; exit}")
+                if [ -z "$PREV_TAG" ]; then
+                  CHANGELOG_URL="${LINK_BASE}/releases/$TAG"
+                else
+                  CHANGELOG_URL="${LINK_BASE}/compare/${CHANGLOG_URL_PREFIX}${PREV_TAG}...${CHANGLOG_URL_PREFIX}${TAG}"
+                fi
+              fi
+              cd ..
+              DESCRIPTION="${RELEASE_NOTE_HEADER}
+
+            These builds are experimental and may sometimes not work, use [regular builds](https://github.com/Ryujinx/release-channel-master/releases) instead if that sounds like something you don't want to deal with.
+
+            ${TABLE}
+
+            **Changelog:** ${CHANGELOG_URL}
+            "
+              DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^ *//g')
+              gh release create "$TAG" -R "$DEST_REPO" --title "$TAG ($RELEASE_TYPE)" --notes "$DESCRIPTION_CLEANED"
+              ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
+              for URL in $ASSET_URLS; do
+                FILENAME=$(basename "$URL")
+                echo "📥 Downloading $FILENAME..."
+                curl -L -o "$FILENAME" "$URL"
+                echo "📤 Uploading $FILENAME..."
+                gh release upload "$TAG" -R "$DEST_REPO" "$FILENAME" || echo "⚠️ Failed to upload $FILENAME"
+                rm -f "$FILENAME"
+              done
+              echo "✅ Successfully migrated release $TAG from $SOURCE!"
+              sleep 1
             done
-            echo "✅ Successfully migrated release $TAG!"
-            sleep 1
           done
         working-directory: ${{ github.workspace }}
