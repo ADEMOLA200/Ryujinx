@@ -1,4 +1,4 @@
-name: Migrate Releases
+name: Migrate Releases with Auto Changelog
 
 on:
   workflow_dispatch:
@@ -30,61 +30,71 @@ jobs:
       - name: Check GitHub API Rate Limits
         run: gh api rate_limit
 
-      - name: Fetch and Migrate Releases
+      - name: Clone Source Repository for Changelog Generation
+        run: |
+          SOURCE_REPO="Ryubing/Canary-Releases"
+          git clone https://github.com/$SOURCE_REPO.git source-canary
+          cd source-canary
+          git fetch --tags
+        working-directory: ${{ github.workspace }}
+
+      - name: Fetch and Migrate Releases with Changelog URL
         run: |
           set -e
           SOURCE_REPO="Ryubing/Canary-Releases"
           DEST_REPO="ADEMOLA200/RyuNX"
-
           SOURCE_TAGS=$(gh api --paginate "/repos/$SOURCE_REPO/releases" --jq '.[].tag_name')
-
           if [ -z "$SOURCE_TAGS" ]; then
-              echo "❌ No releases found in source repository!"
-              exit 1
+            echo "❌ No releases found in source repository!"
+            exit 1
           fi
-
           echo "Found releases to process:"
           echo "$SOURCE_TAGS"
-
           for TAG in $SOURCE_TAGS; do
-              echo "🚀 Processing release: $TAG"
-
-              # Check if the release already exists in the destination repository
-              if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
-                  echo "⏭️ Release $TAG already exists. Skipping..."
-                  continue
+            echo "🚀 Processing release: $TAG"
+            if gh release view "$TAG" -R "$DEST_REPO" > /dev/null 2>&1; then
+              echo "⏭️ Release $TAG already exists. Skipping..."
+              continue
+            fi
+            cd source-canary
+            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+              PREV_TAG=""
+              CHANGELOG_URL="https://github.com/Ryubing/Canary-Releases/releases/$TAG"
+            else
+              PREV_TAG=$(git tag --sort=-v:refname | awk "/^$TAG\$/{found=1; next} found{print; exit}")
+              if [ -z "$PREV_TAG" ]; then
+                CHANGELOG_URL="https://github.com/Ryubing/Canary-Releases/releases/$TAG"
+              else
+                CHANGELOG_URL="https://github.com/Ryubing/Canary-Releases/compare/Canary-${PREV_TAG}...Canary-${TAG}"
               fi
+            fi
+            cd ..
+            DESCRIPTION="## Canary builds:
 
-              ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
+          These builds are experimental and may sometimes not work, use [regular builds](https://github.com/Ryujinx/release-channel-master/releases) instead if that sounds like something you don't want to deal with.
 
-              DESCRIPTION="## Canary builds:
+          | Platform           | Artifact                     |
+          |--------------------|------------------------------|
+          | Windows 64-bit     | Canary Windows Artifact      |
+          | Windows ARM 64-bit | Canary Windows ARM Artifact  |
+          | Linux 64-bit       | Canary Linux Artifact        |
+          | Linux ARM 64-bit   | Canary Linux Artifact        |
+          | macOS              | Canary macOS Artifact        |
 
-              These builds are experimental and may sometimes not work, use [regular builds](https://github.com/Ryujinx/release-channel-master/releases) instead if that sounds like something you don't want to deal with.
-
-              | Platform           | Artifact                     |
-              |--------------------|------------------------------|
-              | Windows 64-bit     | Canary Windows Artifact      |
-              | Windows ARM 64-bit | Canary Windows ARM Artifact  |
-              | Linux 64-bit       | Canary Linux Artifact        |
-              | Linux ARM 64-bit   | Canary Linux ARM Artifact    |
-              | macOS              | Canary macOS Artifact        |"
-
-              # Remove any extra indentation
-              DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^ *//g')
-
-              gh release create "$TAG" -R "$DEST_REPO" \
-                --title "$TAG" \
-                --notes "$DESCRIPTION_CLEANED"
-
-              for URL in $ASSET_URLS; do
-                  FILENAME=$(basename "$URL")
-                  echo "📥 Downloading $FILENAME..."
-                  curl -L -o "$FILENAME" "$URL"
-                  echo "📤 Uploading $FILENAME..."
-                  gh release upload "$TAG" -R "$DEST_REPO" "$FILENAME" || echo "⚠️ Failed to upload $FILENAME"
-                  rm -f "$FILENAME"
-              done
-
-              echo "✅ Successfully migrated release $TAG!"
-              sleep 1
+          **Changelog:** ${CHANGELOG_URL}
+          "
+            DESCRIPTION_CLEANED=$(echo "$DESCRIPTION" | sed 's/^ *//g')
+            gh release create "$TAG" -R "$DEST_REPO" --title "$TAG" --notes "$DESCRIPTION_CLEANED"
+            ASSET_URLS=$(gh release view "$TAG" -R "$SOURCE_REPO" --json assets -q '.assets[].url')
+            for URL in $ASSET_URLS; do
+              FILENAME=$(basename "$URL")
+              echo "📥 Downloading $FILENAME..."
+              curl -L -o "$FILENAME" "$URL"
+              echo "📤 Uploading $FILENAME..."
+              gh release upload "$TAG" -R "$DEST_REPO" "$FILENAME" || echo "⚠️ Failed to upload $FILENAME"
+              rm -f "$FILENAME"
+            done
+            echo "✅ Successfully migrated release $TAG!"
+            sleep 1
           done
+        working-directory: ${{ github.workspace }}
