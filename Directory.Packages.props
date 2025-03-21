@@ -20,7 +20,7 @@
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
     <PackageVersion Include="Concentus" Version="2.2.2" />
     <PackageVersion Include="DiscordRichPresence" Version="1.2.1.24" />
-    <PackageVersion Include="DynamicData" Version="9.0.4" />
+    <PackageVersion Include="DynamicData" Version="9.2.1" />
     <PackageVersion Include="FluentAvaloniaUI" Version="2.0.5" />
     <PackageVersion Include="Humanizer" Version="2.14.1" />
     <PackageVersion Include="LibHac" Version="0.19.0" />
