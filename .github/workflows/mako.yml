@@ -26,13 +26,12 @@ jobs:
       - uses: actions/checkout@v4
         if: github.event_name == 'pull_request_target'
         with:
-          # Ensure we pin the source origin as pull_request_target run under forks.
           fetch-depth: 0
-          repository: Ryujinx/Ryujinx
-          ref: master
+          repository: ADEMOLA200/Ryujinx
+          ref: develop
 
       - name: Run Mako command
-        uses: Ryujinx/Ryujinx-Mako@master
+        uses: ADEMOLA200/Ryujinx-Mako@develop
         with:
           command: exec-ryujinx-tasks
           args: --event-name "${{ github.event_name }}" --event-path "${{ github.event_path }}" -w "${{ github.workspace }}" "${{ github.repository }}" "${{ github.run_id }}"
