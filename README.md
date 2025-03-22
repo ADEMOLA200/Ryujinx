@@ -42,6 +42,13 @@
     <img src="https://github.com/user-attachments/assets/446e82c8-0d4f-440b-a23a-2fac6e22924e" alt="Ryujinx run">
 </p>
 
+## Gameplay Testing
+
+Our builds have been rigorously tested with a wide range of games to ensure smooth performance and stability. For example, the gameplay footage below of EA Sports FC 25 highlights the responsive controls and fluid graphics achievable with these builds.
+<br>
+
+https://github.com/user-attachments/assets/25f2509a-4064-4246-a33a-c84e7dbf4814
+
 ## Usage
 
 To run this emulator, your PC must be equipped with at least 8GiB of RAM;
