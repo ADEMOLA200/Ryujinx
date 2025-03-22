@@ -5,12 +5,18 @@ using Ryujinx.Ava.UI.ViewModels;
 using System;
 using System.Linq;
 
-
 namespace Ryujinx.Ava.UI.Windows
 {
     public partial class GameSpecificSettingsWindow : StyleableAppWindow
     {
         internal readonly SettingsViewModel ViewModel;
+
+        // Parameterless constructor required by Avalonia's runtime loader.
+        // This constructor is intended for design-time/XAML instantiation only.
+        public GameSpecificSettingsWindow()
+        {
+            InitializeComponent();
+        }
 
         public GameSpecificSettingsWindow(MainWindowViewModel viewModel, bool findUserConfigDir = true)
         {
@@ -38,7 +44,6 @@ namespace Ryujinx.Ava.UI.Windows
             InputPage.InputView?.SaveCurrentProfile();
         }
 
-
         private void Load()
         {
             Pages.Children.Clear();
@@ -48,7 +53,6 @@ namespace Ryujinx.Ava.UI.Windows
 
         private void NavPanelOnSelectionChanged(object sender, NavigationViewSelectionChangedEventArgs e)
         {
-            
             if (e.SelectedItem is NavigationViewItem navItem && navItem.Tag is not null)
             {
                 switch (navItem.Tag.ToString())
@@ -92,7 +96,7 @@ namespace Ryujinx.Ava.UI.Windows
 
         protected override void OnClosing(WindowClosingEventArgs e)
         {
-            InputPage.Dispose(); // You need to unload the gamepad settings, otherwise the controls will be blocked
+            InputPage.Dispose();
             base.OnClosing(e);
         }
     }
