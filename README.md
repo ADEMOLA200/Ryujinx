@@ -7,8 +7,8 @@
           
 # Ryujinx
 
-[![Latest release](https://img.shields.io/github/v/release/Ryubing/Stable-Releases?label=stable)](https://github.com/Ryubing/Stable-Releases/releases/latest)
-[![Latest canary release](https://img.shields.io/github/v/release/Ryubing/Canary-Releases?label=canary)](https://github.com/Ryubing/Canary-Releases/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Ryubing/Stable-Releases?label=stable)](https://github.com/ADEMOLA200/Ryujinx-Stable-Builds/releases/latest)
+[![Latest canary release](https://img.shields.io/github/v/release/Ryubing/Canary-Releases?label=canary)](https://github.com/ADEMOLA200/Ryujinx-Canary-Builds/releases/latest)
 <br>
 <a href="https://discord.gg/PEuzjrFXUA">
 <img src="https://img.shields.io/discord/1294443224030511104?color=5865F2&label=Ryubing&logo=discord&logoColor=white" alt="Discord">
@@ -30,8 +30,8 @@
   This fork is intended to be a QoL uplift for existing Ryujinx users.
   <br>
   This is not a Ryujinx revival project. This is not a Phoenix project.
-  <br>
-  Guides and documentation can be found on the <a href="https://git.ryujinx.app/ryubing/ryujinx/-/wikis/home">Wiki tab</a>.
+<!--   <br>
+  Guides and documentation can be found on the <a href="https://git.ryujinx.app/ryubing/ryujinx/-/wikis/home">Wiki tab</a>. -->
 </p>
 
 <p align="center">
@@ -53,13 +53,13 @@ Stable builds are made every so often, based on the `master` branch, that then g
 These stable builds exist so that the end user can get a more **enjoyable and stable experience**.
 They are released every month or so, to ensure consistent updates, while not being an annoying amount of individual updates to download over the course of that month.
 
-You can find the latest stable release [here](https://github.com/Ryubing/Stable-Releases/releases/latest).
+You can find the latest stable release [Stable Release](https://github.com/ADEMOLA200/Ryujinx-Stable-Builds/releases/latest).
 
 Canary builds are compiled automatically for each commit on the `master` branch.
 While we strive to ensure optimal stability and performance prior to pushing an update, these builds **may be unstable or completely broken**.
 These canary builds are only recommended for experienced users.
 
-You can find the latest canary release [here](https://github.com/Ryubing/Canary-Releases/releases/latest).
+You can find the latest canary release [Canary Release](https://github.com/ADEMOLA200/Ryujinx-Canary-Builds/releases/latest).
 
 ## Documentation
 
