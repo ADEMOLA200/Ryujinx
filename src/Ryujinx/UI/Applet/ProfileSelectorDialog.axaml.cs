@@ -17,10 +17,14 @@ namespace Ryujinx.Ava.UI.Applet
 {
     public partial class ProfileSelectorDialog : RyujinxControl<ProfileSelectorDialogViewModel>
     {
+        // Parameterless constructor needed for Avalonia's runtime loader.
+        public ProfileSelectorDialog() : this(new ProfileSelectorDialogViewModel())
+        {
+        }
+
         public ProfileSelectorDialog(ProfileSelectorDialogViewModel viewModel)
         {
             DataContext = ViewModel = viewModel;
-            
             InitializeComponent();
         }
         
@@ -53,7 +57,7 @@ namespace Ryujinx.Ava.UI.Applet
                         ViewModel.SelectedUserId = userProfile.UserId;
                         Logger.Info?.Print(LogClass.UI, $"Selected: {userProfile.UserId}", "ProfileSelector");
 
-                        ObservableCollection<BaseModel> newProfiles = [];
+                        ObservableCollection<BaseModel> newProfiles = new ObservableCollection<BaseModel>();
 
                         foreach (BaseModel item in ViewModel.Profiles)
                         {
